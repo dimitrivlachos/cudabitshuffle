@@ -1,4 +1,12 @@
 # # # # # # # # # #
+# Directory Ignore
+# v # v # v # v # #
+
+data/
+build/
+_build/
+
+# # # # # # # # # #
 # C++ Ignore
 # v # v # v # v # #
 
