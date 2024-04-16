@@ -1,3 +1,7 @@
+# # # # # # # # # #
+# C++ Ignore
+# v # v # v # v # #
+
 # Prerequisites
 *.d
 
@@ -30,3 +34,14 @@
 *.exe
 *.out
 *.app
+
+# # # # # # # # # #
+# CUDA Ignore
+# v # v # v # v # #
+
+*.i
+*.ii
+*.gpu
+*.ptx
+*.cubin
+*.fatbin
