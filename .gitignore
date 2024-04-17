@@ -5,6 +5,7 @@
 data/
 build/
 _build/
+ENV/
 
 # # # # # # # # # #
 # C++ Ignore
