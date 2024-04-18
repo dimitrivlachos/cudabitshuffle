@@ -17,11 +17,14 @@ __global__ void cuda_bitshuffle(unsigned int *d_input, unsigned int *d_output, i
     }
 }
 
-__global__ void test() {
-    printf("Hello from CUDA\n");
+__global__ 
+void test(const char *msg) {
+    printf("Hello from CUDA: %s\n", msg);
 }
 
 void run_test() {
-    test<<<1, 1>>>();
+    printf("Hello from run_test\n");
+    test<<<1, 1>>>("Hello from kernel");
+    printf("Hello from run_test after kernel\n");
     cudaDeviceSynchronize();
 }
