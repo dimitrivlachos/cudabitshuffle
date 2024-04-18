@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(cudabitshuffle)
+project(cudabitshuffle LANGUAGES CXX CUDA)
 
 # Set the C++ standard to use
 set(CMAKE_CXX_STANDARD 20)
@@ -8,8 +8,8 @@ set(CMAKE_CUDA_STANDARD 17)
 # Find the CUDA package
 find_package(CUDAToolkit REQUIRED)
 
-# Add the subdirectories
-
+# Add the directories
+include_directories(include)
 
 # Find the required packages
 find_package(nvcomp REQUIRED)
@@ -26,8 +26,6 @@ add_executable(
 target_link_libraries(
     cudabitshuffle
     PRIVATE
-    h5read
-    LZ4::lz4
 )
 target_compile_options(
     cudabitshuffle
