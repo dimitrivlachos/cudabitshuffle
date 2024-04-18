@@ -5,6 +5,12 @@ project(cudabitshuffle LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CUDA_STANDARD 17)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS yes)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
+include(SetDefaultBuildRelWithDebInfo)
+include(AlwaysColourCompilation)
+#include(UseSpanBackportIfNeeded)
+
 # Find the CUDA package
 find_package(CUDAToolkit REQUIRED)
 
