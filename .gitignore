@@ -6,6 +6,7 @@ data/
 build/
 _build/
 ENV/
+h5read/
 
 # # # # # # # # # #
 # C++ Ignore
