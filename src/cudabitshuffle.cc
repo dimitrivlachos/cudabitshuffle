@@ -1,5 +1,5 @@
 #include <iostream>
-#include <include/cudabitshuffle.h>
+#include "cudabitshuffle.h"
 
 int main() {
     std::cout << "Running test:" << std::endl;

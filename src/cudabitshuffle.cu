@@ -3,6 +3,7 @@
 */
 
 #include <stdio.h>
+#include "cudabitshuffle.h"
 
 __global__ void cuda_bitshuffle(unsigned int *d_input, unsigned int *d_output, int numElements, int numBits) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
