@@ -1,0 +1,3 @@
+[submodule "dependencies/span"]
+	path = dependencies/span
+	url = https://github.com/tcbrindle/span.git
