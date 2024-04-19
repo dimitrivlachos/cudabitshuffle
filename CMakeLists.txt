@@ -17,6 +17,9 @@ find_package(CUDAToolkit REQUIRED)
 # Add the directories
 include_directories(include)
 
+# Add subdirectories
+add_subdirectory(h5read)
+
 # Find the required packages
 find_package(nvcomp REQUIRED)
 find_package(CUDAToolkit REQUIRED)
@@ -32,6 +35,7 @@ add_executable(
 target_link_libraries(
     cudabitshuffle
     PRIVATE
+    h5read
 )
 target_compile_options(
     cudabitshuffle
