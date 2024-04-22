@@ -36,6 +36,7 @@ target_link_libraries(
     cudabitshuffle
     PRIVATE
     h5read
+    CUDA::cudart
 )
 target_compile_options(
     cudabitshuffle
