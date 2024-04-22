@@ -1,3 +1,6 @@
 [submodule "dependencies/span"]
 	path = dependencies/span
 	url = https://github.com/tcbrindle/span.git
+[submodule "dependencies/bitshuffle"]
+	path = dependencies/bitshuffle
+	url = https://github.com/kiyo-masui/bitshuffle
