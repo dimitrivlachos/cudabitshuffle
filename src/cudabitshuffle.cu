@@ -2,7 +2,7 @@
  * CUDA Kernel for bit shuffling
  */
 
-#include "cudabitshuffle.h"
+#include "cudabitshuffle.hpp"
 #include <stdio.h>
 
 //
