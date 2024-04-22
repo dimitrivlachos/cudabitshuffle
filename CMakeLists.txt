@@ -23,6 +23,8 @@ add_subdirectory(h5read)
 # Find the required packages
 find_package(nvcomp REQUIRED)
 find_package(CUDAToolkit REQUIRED)
+find_package(LZ4 REQUIRED)
+find_package(Bitshuffle REQUIRED)
 
 # Add the executable
 add_executable(
@@ -37,6 +39,8 @@ target_link_libraries(
     PRIVATE
     h5read
     CUDA::cudart
+    LZ4::LZ4
+    Bitshuffle::bitshuffle
 )
 target_compile_options(
     cudabitshuffle
