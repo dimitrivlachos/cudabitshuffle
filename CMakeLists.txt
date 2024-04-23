@@ -16,9 +16,11 @@ find_package(CUDAToolkit REQUIRED)
 
 # Add the directories
 include_directories(include)
+include_directories(common/include)
 
 # Add subdirectories
 add_subdirectory(h5read)
+add_subdirectory(dependencies/fmt fmt)
 
 # Find the required packages
 find_package(nvcomp REQUIRED)
@@ -37,6 +39,7 @@ add_executable(
 target_link_libraries(
     cudabitshuffle
     PRIVATE
+    fmt
     h5read
     CUDA::cudart
     LZ4::LZ4
