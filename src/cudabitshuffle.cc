@@ -1,11 +1,24 @@
 #include "cudabitshuffle.hpp"
+#include "common.hpp"
 #include "h5read.h"
 #include <bitshuffle.h>
 #include <cuda_runtime.h>
+#include <fmt/core.h>
 #include <iostream>
 
 // Define the pixel type
 using pixel_t = H5Read::image_type;
+
+class cuda_error : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
+
+inline auto cuda_error_string(cudaError_t err) {
+  const char *err_name = cudaGetErrorName(err);
+  const char *err_str = cudaGetErrorString(err);
+  return fmt::format("{}: {}", std::string{err_name}, std::string{err_str});
+}
 
 /// Allocate memory using cudaMallocHost
 template <typename T> auto make_cuda_pinned_malloc(size_t num_items = 1) {
@@ -13,7 +26,8 @@ template <typename T> auto make_cuda_pinned_malloc(size_t num_items = 1) {
   Tb *obj = nullptr;
   auto err = cudaMallocHost(&obj, sizeof(Tb) * num_items);
   if (err != cudaSuccess || obj == nullptr) {
-    throw std::runtime_error("Failed to allocate pinned memory");
+    throw cuda_error(fmt::format("Error in make_cuda_pinned_malloc: {}",
+                                 cuda_error_string(err)));
   }
   auto deleter = [](Tb *ptr) { cudaFreeHost(ptr); };
   return std::shared_ptr<T[]>{obj, deleter};
@@ -25,9 +39,6 @@ int main() {
   int height = reader.image_shape()[0];
   int width = reader.image_shape()[1];
 
-  // pixel_t *host_image = new pixel_t[width * height];
-  // pixel_t *host_results = new pixel_t[width * height];
-
   auto host_image = make_cuda_pinned_malloc<pixel_t>(width * height);
   auto host_results = make_cuda_pinned_malloc<uint8_t>(width * height);
 
@@ -35,22 +46,10 @@ int main() {
   auto raw_chunk_buffer =
       std::vector<uint8_t>(width * height * sizeof(pixel_t));
 
-  // int number_of_images = reader.get_number_of_images();
-
   // Create empty buffer to store the compressed chunk data
   SPAN<uint8_t> buffer;
 
-  buffer = reader.get_raw_chunk(50, raw_chunk_buffer);
-
-  // for (int i = 0; i < number_of_images; i++) {
-  //   if (reader.is_image_available(i)) {
-  //     auto buffer = reader.get_raw_chunk(i, raw_chunk_buffer);
-  //     std::cout << "Buffer size: " << buffer.size() << std::endl;
-  //     break;
-  //   }
-  // }
-
-  // std::cout << "Buffer size: " << buffer.size() << std::endl;
+  buffer = reader.get_raw_chunk(49, raw_chunk_buffer);
 
   // Print the first 50 elements of the compressed chunk data
   for (int i = 0; i < 50; i++) {
@@ -75,6 +74,9 @@ int main() {
     std::cout << (int)host_image[460 + i] << " ";
   }
   std::cout << std::endl;
+
+  // image data x, y, width and height, image width and height
+  draw_image_data(host_image.get(), 1640, 1690, 35, 40, width, height);
 
   return 0;
 }
