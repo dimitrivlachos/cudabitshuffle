@@ -40,7 +40,6 @@ int main() {
   int width = reader.image_shape()[1];
 
   auto host_image = make_cuda_pinned_malloc<pixel_t>(width * height);
-  auto host_results = make_cuda_pinned_malloc<uint8_t>(width * height);
 
   // Buffer for reading compressed chunk data in
   auto raw_chunk_buffer =
