@@ -20,7 +20,7 @@ include_directories(common/include)
 
 # Add subdirectories
 add_subdirectory(h5read)
-add_subdirectory(dependencies/fmt fmt)
+add_subdirectory(dependencies/fmt)
 
 # Find the required packages
 find_package(nvcomp REQUIRED)
