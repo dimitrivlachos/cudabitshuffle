@@ -4,3 +4,6 @@
 [submodule "dependencies/bitshuffle"]
 	path = dependencies/bitshuffle
 	url = https://github.com/kiyo-masui/bitshuffle
+[submodule "dependencies/fmt"]
+	path = dependencies/fmt
+	url = https://github.com/fmtlib/fmt
