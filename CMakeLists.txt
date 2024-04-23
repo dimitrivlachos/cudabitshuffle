@@ -9,7 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS yes)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
 include(SetDefaultBuildRelWithDebInfo)
 include(AlwaysColourCompilation)
-#include(UseSpanBackportIfNeeded)
+include(UseSpanBackportIfNeeded)
 
 # Find the CUDA package
 find_package(CUDAToolkit REQUIRED)
