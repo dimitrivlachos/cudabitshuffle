@@ -33,6 +33,46 @@ template <typename T> auto make_cuda_pinned_malloc(size_t num_items = 1) {
   return std::shared_ptr<T[]>{obj, deleter};
 }
 
+void cpu_decompress(H5Read *reader, std::shared_ptr<pixel_t[]> *out,
+                    int chunk_index) {
+  // Get the image width and height
+  int height = reader->image_shape()[0];
+  int width = reader->image_shape()[1];
+
+  auto raw_chunk_buffer =
+      std::vector<uint8_t>(width * height * sizeof(pixel_t));
+
+  SPAN<uint8_t> buffer;
+  buffer = reader->get_raw_chunk(chunk_index, raw_chunk_buffer);
+
+  // Print the first 50 elements of the compressed chunk data
+  for (int i = 0; i < 50; i++) {
+    std::cout << (int)buffer[i] << " ";
+  }
+  std::cout << std::endl;
+
+  // Get the chunk compression type
+  auto compression = reader->get_raw_chunk_compression();
+  std::cout << "Chunk compression: " << compression << std::endl;
+
+  // Decompress and deshuffle the data using the bitshuffle library
+  bshuf_decompress_lz4(buffer.data() + 12, out->get(), width * height, 2, 0);
+
+  int j = 0;
+  while ((*out)[j] == 0) {
+    j++;
+  }
+  std::cout << "J: " << j << std::endl;
+
+  // Print 50 elements around the first non-zero element of the decompressed
+  // data
+  for (int i = 0; i < 50; i++) {
+    // std::cout << (int)(*out)[j - 25 + i] << " ";
+    std::cout << (int)(*out)[460 + i] << " ";
+  }
+  std::cout << std::endl;
+}
+
 int main() {
   H5Read reader("../data/ins_13_1_1.nxs");
 
@@ -42,46 +82,11 @@ int main() {
   auto host_decompressed_image =
       make_cuda_pinned_malloc<pixel_t>(width * height);
 
-  // Buffer for reading compressed chunk data in
-  auto raw_chunk_buffer =
-      std::vector<uint8_t>(width * height * sizeof(pixel_t));
-
-  // Create empty buffer to store the compressed chunk data
-  SPAN<uint8_t> buffer;
-
-  buffer = reader.get_raw_chunk(49, raw_chunk_buffer);
-
-  // Print the first 50 elements of the compressed chunk data
-  for (int i = 0; i < 50; i++) {
-    std::cout << (int)buffer[i] << " ";
-  }
-  std::cout << std::endl;
-
-  // Check chunk compression type
-  auto compression = reader.get_raw_chunk_compression();
-  std::cout << "Chunk compression: " << compression << std::endl;
-
-  // Decompress and deshuffle the data using the bitshuffle library
-  bshuf_decompress_lz4(buffer.data() + 12, host_decompressed_image.get(),
-                       width * height, 2, 0);
-
-  int j = 0;
-  while (host_decompressed_image[j] == 0) {
-    j++;
-  }
-  std::cout << "J: " << j << std::endl;
-  for (int i = 0; i < 50; i++) {
-    std::cout << (int)host_decompressed_image[460 + i] << " ";
-  }
-  std::cout << std::endl;
+  cpu_decompress(&reader, &host_decompressed_image, 49);
 
   // image data x, y, width and height, image width and height
   draw_image_data(host_decompressed_image.get(), 1640, 1690, 35, 40, width,
                   height);
-
-  /* Perform and compare cuda bitshuffle */
-
-  // Allocate memory on the device
 
   return 0;
 }
