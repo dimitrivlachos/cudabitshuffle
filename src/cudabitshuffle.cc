@@ -39,7 +39,8 @@ int main() {
   int height = reader.image_shape()[0];
   int width = reader.image_shape()[1];
 
-  auto host_image = make_cuda_pinned_malloc<pixel_t>(width * height);
+  auto host_decompressed_image =
+      make_cuda_pinned_malloc<pixel_t>(width * height);
 
   // Buffer for reading compressed chunk data in
   auto raw_chunk_buffer =
@@ -61,21 +62,26 @@ int main() {
   std::cout << "Chunk compression: " << compression << std::endl;
 
   // Decompress and deshuffle the data using the bitshuffle library
-  bshuf_decompress_lz4(buffer.data() + 12, host_image.get(), width * height, 2,
-                       0);
+  bshuf_decompress_lz4(buffer.data() + 12, host_decompressed_image.get(),
+                       width * height, 2, 0);
 
   int j = 0;
-  while (host_image[j] == 0) {
+  while (host_decompressed_image[j] == 0) {
     j++;
   }
   std::cout << "J: " << j << std::endl;
   for (int i = 0; i < 50; i++) {
-    std::cout << (int)host_image[460 + i] << " ";
+    std::cout << (int)host_decompressed_image[460 + i] << " ";
   }
   std::cout << std::endl;
 
   // image data x, y, width and height, image width and height
-  draw_image_data(host_image.get(), 1640, 1690, 35, 40, width, height);
+  draw_image_data(host_decompressed_image.get(), 1640, 1690, 35, 40, width,
+                  height);
+
+  /* Perform and compare cuda bitshuffle */
+
+  // Allocate memory on the device
 
   return 0;
 }
