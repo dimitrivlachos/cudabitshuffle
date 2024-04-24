@@ -33,6 +33,46 @@ template <typename T> auto make_cuda_pinned_malloc(size_t num_items = 1) {
   return std::shared_ptr<T[]>{obj, deleter};
 }
 
+template <typename T>
+auto make_cuda_pitched_malloc(size_t width, size_t height) {
+  static_assert(!std::is_unbounded_array_v<T>,
+                "T automatically returns unbounded array pointer");
+  size_t pitch = 0;
+  T *obj = nullptr;
+  auto err = cudaMallocPitch(&obj, &pitch, width * sizeof(T), height);
+  if (err != cudaSuccess || obj == nullptr) {
+    throw cuda_error(fmt::format("Error in make_cuda_pitched_malloc: {}",
+                                 cuda_error_string(err)));
+  }
+
+  auto deleter = [](T *ptr) { cudaFree(ptr); };
+
+  return std::make_pair(std::shared_ptr<T[]>(obj, deleter), pitch / sizeof(T));
+}
+
+template <typename T> struct PitchedMalloc {
+public:
+  using value_type = T;
+  PitchedMalloc(std::shared_ptr<T[]> data, size_t width, size_t height,
+                size_t pitch)
+      : _data(data), width(width), height(height), pitch(pitch) {}
+
+  PitchedMalloc(size_t width, size_t height) : width(width), height(height) {
+    auto [alloc, alloc_pitch] = make_cuda_pitched_malloc<T>(width, height);
+    _data = alloc;
+    pitch = alloc_pitch;
+  }
+
+  auto get() { return _data.get(); }
+  auto size_bytes() -> size_t const { return pitch * height * sizeof(T); }
+  auto pitch_bytes() -> size_t const { return pitch * sizeof(T); }
+
+  std::shared_ptr<T[]> _data;
+  size_t width;
+  size_t height;
+  size_t pitch;
+};
+
 void cpu_decompress(H5Read *reader, std::shared_ptr<pixel_t[]> *out,
                     int chunk_index) {
   // Get the image width and height
@@ -73,6 +113,35 @@ void cpu_decompress(H5Read *reader, std::shared_ptr<pixel_t[]> *out,
   std::cout << std::endl;
 }
 
+void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
+  // Get the image width and height
+  int height = reader->image_shape()[0];
+  int width = reader->image_shape()[1];
+
+  auto raw_chunk_buffer =
+      std::vector<uint8_t>(width * height * sizeof(pixel_t));
+
+  SPAN<uint8_t> buffer;
+  buffer = reader->get_raw_chunk(chunk_index, raw_chunk_buffer);
+
+  SPAN<uint8_t> d_buffer;
+  // TODO: Fix this pitched malloc
+  d_buffer = PitchedMalloc<uint8_t>(width, height);
+
+  // Copy the compressed chunk data to the device
+  cudaMemcpy(d_buffer.data(), buffer.data() + 12, buffer.size_bytes(),
+             cudaMemcpyHostToDevice);
+
+  // Print the first 50 elements of the compressed chunk data
+  for (int i = 0; i < 50; i++) {
+    std::cout << (int)d_buffer[i] << " ";
+  }
+
+  // Get the chunk compression type
+  auto compression = reader->get_raw_chunk_compression();
+  std::cout << "Chunk compression: " << compression << std::endl;
+}
+
 int main() {
   H5Read reader("../data/ins_13_1_1.nxs");
 
@@ -82,7 +151,16 @@ int main() {
   auto host_decompressed_image =
       make_cuda_pinned_malloc<pixel_t>(width * height);
 
+  auto device_decompressed_image =
+      make_cuda_pitched_malloc<pixel_t>(width, height);
+
+  fmt::print("CPU Decompression\n");
+
   cpu_decompress(&reader, &host_decompressed_image, 49);
+
+  fmt::print("GPU Decompression\n");
+
+  gpu_decompress(&reader, &device_decompressed_image, 49);
 
   // image data x, y, width and height, image width and height
   draw_image_data(host_decompressed_image.get(), 1640, 1690, 35, 40, width,
