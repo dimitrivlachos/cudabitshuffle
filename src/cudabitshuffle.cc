@@ -133,6 +133,7 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
              cudaMemcpyHostToDevice);
 
   print_array(d_buffer, length, 0);
+  nvc_decompress(d_buffer);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();

@@ -6,6 +6,15 @@
 #include <iostream>
 #include <stdio.h>
 
+#define CUDA_CHECK(call)                                                       \
+  do {                                                                         \
+    cudaError_t err = call;                                                    \
+    if (err != cudaSuccess) {                                                  \
+      printf("CUDA Error: %s: %s\n", cudaGetErrorName(err),                    \
+             cudaGetErrorString(err));                                         \
+    }                                                                          \
+  } while (0)
+
 //
 inline auto cuda_error_string(cudaError_t err) {
   const char *err_name = cudaGetErrorName(err);
@@ -44,6 +53,24 @@ __global__ void print_array_kernel(uint8_t *d_buffer, int length, int index) {
 }
 
 __global__ void test() { printf("Hello from CUDA\n"); }
+
+void nvc_decompress(uint8_t *d_buffer) {
+  using namespace nvcomp;
+  cudaStream_t stream;
+  CUDA_CHECK(cudaStreamCreate(&stream));
+  uint8_t *comp_buffer = d_buffer;
+
+  auto decomp_nvcomp_manager = create_manager(comp_buffer, stream);
+
+  DecompressionConfig decomp_config =
+      decomp_nvcomp_manager->configure_decompression(comp_buffer);
+  uint8_t *res_decomp_buffer;
+  CUDA_CHECK(cudaMalloc(&res_decomp_buffer, decomp_config.decomp_data_size));
+
+  decomp_nvcomp_manager->decompress(res_decomp_buffer, comp_buffer,
+                                    decomp_config);
+  print_array(res_decomp_buffer, decomp_config.decomp_data_size, 0);
+}
 
 void run_test() {
   test<<<1, 1>>>();
