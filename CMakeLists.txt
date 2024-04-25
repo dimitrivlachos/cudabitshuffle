@@ -44,6 +44,7 @@ target_link_libraries(
     CUDA::cudart
     LZ4::LZ4
     Bitshuffle::bitshuffle
+    nvcomp::nvcomp
 )
 target_compile_options(
     cudabitshuffle
