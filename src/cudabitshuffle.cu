@@ -58,21 +58,28 @@ void nvc_decompress(uint8_t *d_buffer) {
   using namespace nvcomp;
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
-  uint8_t *comp_buffer = d_buffer;
   printf("Creating manager\n");
-  auto decomp_nvcomp_manager = create_manager(comp_buffer, stream);
+  auto decomp_nvcomp_manager = create_manager(d_buffer, stream);
 
   printf("Configuring decompression\n");
   DecompressionConfig decomp_config =
-      decomp_nvcomp_manager->configure_decompression(comp_buffer);
+      decomp_nvcomp_manager->configure_decompression(d_buffer);
   uint8_t *res_decomp_buffer;
 
   printf("Allocating memory\n");
   CUDA_CHECK(cudaMalloc(&res_decomp_buffer, decomp_config.decomp_data_size));
 
   printf("Decompressing\n");
-  decomp_nvcomp_manager->decompress(res_decomp_buffer, comp_buffer,
-                                    decomp_config);
+  // TODO: Fix this
+  /*
+
+  Decompressing
+  terminate called after throwing an instance of 'std::runtime_error'
+    what():  Encountered Cuda Error: 2: 'out of memory'.
+  Aborted (core dumped)
+
+  */
+  decomp_nvcomp_manager->decompress(res_decomp_buffer, d_buffer, decomp_config);
 
   printf("Printing decompressed array\n");
   print_array(res_decomp_buffer, decomp_config.decomp_data_size, 0);
