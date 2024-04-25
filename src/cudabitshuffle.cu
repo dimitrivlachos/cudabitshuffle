@@ -3,6 +3,7 @@
  */
 
 #include "cudabitshuffle.hpp"
+#include <iostream>
 #include <stdio.h>
 
 //
@@ -34,10 +35,24 @@ __global__ void cuda_bitshuffle(unsigned int *d_input, unsigned int *d_output,
   }
 }
 
+__global__ void print_array_kernel(uint8_t *d_buffer, int length, int index) {
+  int limit = min(index + 50, length);
+  for (int i = index; i < limit; i++) {
+    printf("%d ", d_buffer[i]);
+  }
+  printf("\n");
+}
+
 __global__ void test() { printf("Hello from CUDA\n"); }
 
 void run_test() {
   test<<<1, 1>>>();
+  cuda_throw_error();
+  cudaDeviceSynchronize();
+}
+
+void print_array(uint8_t *d_buffer, int length, int index) {
+  print_array_kernel<<<1, 1>>>(d_buffer, length, index);
   cuda_throw_error();
   cudaDeviceSynchronize();
 }
