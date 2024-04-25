@@ -124,18 +124,15 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
   SPAN<uint8_t> buffer;
   buffer = reader->get_raw_chunk(chunk_index, raw_chunk_buffer);
 
-  SPAN<uint8_t> d_buffer;
-  // TODO: Fix this pitched malloc
-  d_buffer = PitchedMalloc<uint8_t>(width, height);
+  uint8_t *d_buffer;
+  cudaMalloc(&d_buffer, width * height * sizeof(pixel_t));
+  int length = width * height * sizeof(pixel_t);
 
   // Copy the compressed chunk data to the device
-  cudaMemcpy(d_buffer.data(), buffer.data() + 12, buffer.size_bytes(),
+  cudaMemcpy(d_buffer, buffer.data() + 12, buffer.size_bytes(),
              cudaMemcpyHostToDevice);
 
-  // Print the first 50 elements of the compressed chunk data
-  for (int i = 0; i < 50; i++) {
-    std::cout << (int)d_buffer[i] << " ";
-  }
+  print_array(d_buffer, length, 0);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
@@ -158,13 +155,13 @@ int main() {
 
   cpu_decompress(&reader, &host_decompressed_image, 49);
 
-  fmt::print("GPU Decompression\n");
-
-  gpu_decompress(&reader, &device_decompressed_image, 49);
-
   // image data x, y, width and height, image width and height
   draw_image_data(host_decompressed_image.get(), 1640, 1690, 35, 40, width,
                   height);
+
+  fmt::print("GPU Decompression\n");
+
+  gpu_decompress(&reader, &device_decompressed_image, 49);
 
   return 0;
 }
