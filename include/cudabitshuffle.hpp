@@ -1,10 +1,15 @@
 #pragma once
 
+#include "common.hpp"
 #include "h5read.h"
+#include <bitshuffle.h>
 #include <cstdint>
 #include <cuda_runtime.h>
+#include <fmt/core.h>
+#include <iostream>
 #include <nvcomp.hpp>
 #include <nvcomp/nvcompManagerFactory.hpp>
+#include <stdio.h>
 
 void run_test();
 
