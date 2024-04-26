@@ -67,7 +67,24 @@ void nvc_decompress(uint8_t *d_buffer) {
   uint8_t *res_decomp_buffer;
 
   printf("Allocating memory\n");
+  size_t available_memory, total_memory;
+  CUDA_CHECK(cudaMemGetInfo(&available_memory, &total_memory));
+  printf("Total memory: %lu bytes, Available memory: %lu bytes\n", total_memory,
+         available_memory);
+
+  if (decomp_config.decomp_data_size > available_memory) {
+    printf("Not enough memory for decompressed data\n");
+    return;
+  }
   CUDA_CHECK(cudaMalloc(&res_decomp_buffer, decomp_config.decomp_data_size));
+
+  size_t d_buffer_size;
+  CUDA_CHECK(cudaMemGetInfo(nullptr, &d_buffer_size));
+  printf("Size of d_buffer: %lu bytes\n", d_buffer_size);
+
+  size_t res_decomp_buffer_size;
+  CUDA_CHECK(cudaMemGetInfo(nullptr, &res_decomp_buffer_size));
+  printf("Size of res_decomp_buffer: %lu bytes\n", res_decomp_buffer_size);
 
   printf("Decompressing\n");
   // TODO: Fix this
