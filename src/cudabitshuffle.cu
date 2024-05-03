@@ -3,8 +3,6 @@
  */
 
 #include "cudabitshuffle.hpp"
-#include <iostream>
-#include <stdio.h>
 
 #define CUDA_CHECK(call)                                                       \
   do {                                                                         \
@@ -59,24 +57,32 @@ void nvc_decompress(uint8_t *d_buffer) {
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
   printf("Creating manager\n");
-  auto decomp_nvcomp_manager = create_manager(d_buffer, stream);
+  uint8_t *comp_buffer;
+
+  size_t buffer_size = sizeof(uint32_t) + 8192;
+  CUDA_CHECK(cudaMalloc(&comp_buffer, buffer_size));
+  CUDA_CHECK(
+      cudaMemcpy(comp_buffer, d_buffer, buffer_size, cudaMemcpyDeviceToDevice));
+
+  auto decomp_nvcomp_manager = create_manager(comp_buffer, stream);
 
   printf("Configuring decompression\n");
   DecompressionConfig decomp_config =
-      decomp_nvcomp_manager->configure_decompression(d_buffer);
+      decomp_nvcomp_manager->configure_decompression(comp_buffer);
   uint8_t *res_decomp_buffer;
 
   printf("Allocating memory\n");
   size_t available_memory, total_memory;
   CUDA_CHECK(cudaMemGetInfo(&available_memory, &total_memory));
-  printf("Total memory: %lu bytes, Available memory: %lu bytes\n", total_memory,
-         available_memory);
+  size_t decomp_data_size = decomp_config.decomp_data_size;
+  printf("Total memory: %lu bytes, Available memory: %lu bytes, decomp_size: "
+         "%lu\n",
+         total_memory, available_memory, decomp_data_size);
 
-  if (decomp_config.decomp_data_size > available_memory) {
+  if (decomp_data_size > available_memory) {
     printf("Not enough memory for decompressed data\n");
-    return;
   }
-  CUDA_CHECK(cudaMalloc(&res_decomp_buffer, decomp_config.decomp_data_size));
+  CUDA_CHECK(cudaMalloc(&res_decomp_buffer, decomp_data_size));
 
   size_t d_buffer_size;
   CUDA_CHECK(cudaMemGetInfo(nullptr, &d_buffer_size));
