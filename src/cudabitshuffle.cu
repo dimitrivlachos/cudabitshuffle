@@ -53,6 +53,52 @@ __global__ void test() { printf("Hello from CUDA\n"); }
 //   const batch_size =
 // }
 
+/**
+ * @brief: Return the byteswapped value of a 64-bit header
+ * @param ptr: Pointer to the 64-bit header
+ * @return: The byteswapped value of the header
+ */
+uint64_t byteswap64(const void *ptr) {
+  uint64_t value;
+  memcpy(&value, ptr, sizeof(uint64_t));
+  uint8_t *bytes = (uint8_t *)&value;
+  uint8_t tmp;
+  tmp = bytes[0];
+  bytes[0] = bytes[7];
+  bytes[7] = tmp;
+  tmp = bytes[1];
+  bytes[1] = bytes[6];
+  bytes[6] = tmp;
+  tmp = bytes[2];
+  bytes[2] = bytes[5];
+  bytes[5] = tmp;
+  tmp = bytes[3];
+  bytes[3] = bytes[4];
+  bytes[4] = tmp;
+  memcpy(&value, bytes, sizeof(uint64_t));
+  return value;
+}
+
+/**
+ * @brief: Return the byteswapped value of a 32-bit header
+ * @param ptr: Pointer to the 32-bit header
+ * @return: The byteswapped value of the header
+ */
+uint32_t byteswap32(void *ptr) {
+  uint32_t value;
+  memcpy(&value, ptr, sizeof(uint32_t));
+  uint8_t *bytes = (uint8_t *)&value;
+  uint8_t tmp;
+  tmp = bytes[0];
+  bytes[0] = bytes[3];
+  bytes[3] = tmp;
+  tmp = bytes[1];
+  bytes[1] = bytes[2];
+  bytes[2] = tmp;
+  memcpy(&value, bytes, sizeof(uint32_t));
+  return value;
+}
+
 void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
                         uint8_t *decompressed_data, size_t decompressed_size) {
   cudaStream_t stream;

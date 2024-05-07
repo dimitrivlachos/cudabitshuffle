@@ -3,33 +3,33 @@
 // Define the pixel type
 using pixel_t = H5Read::image_type;
 
-void byteswap64(void *ptr) {
-  uint8_t *bytes = (uint8_t *)ptr;
-  uint8_t tmp;
-  tmp = bytes[0];
-  bytes[0] = bytes[7];
-  bytes[7] = tmp;
-  tmp = bytes[1];
-  bytes[1] = bytes[6];
-  bytes[6] = tmp;
-  tmp = bytes[2];
-  bytes[2] = bytes[5];
-  bytes[5] = tmp;
-  tmp = bytes[3];
-  bytes[3] = bytes[4];
-  bytes[4] = tmp;
+// void byteswap64(void *ptr) {
+//   uint8_t *bytes = (uint8_t *)ptr;
+//   uint8_t tmp;
+//   tmp = bytes[0];
+//   bytes[0] = bytes[7];
+//   bytes[7] = tmp;
+//   tmp = bytes[1];
+//   bytes[1] = bytes[6];
+//   bytes[6] = tmp;
+//   tmp = bytes[2];
+//   bytes[2] = bytes[5];
+//   bytes[5] = tmp;
+//   tmp = bytes[3];
+//   bytes[3] = bytes[4];
+//   bytes[4] = tmp;
 }
 
-void byteswap32(void *ptr) {
-  uint8_t *bytes = (uint8_t *)ptr;
-  uint8_t tmp;
-  tmp = bytes[0];
-  bytes[0] = bytes[3];
-  bytes[3] = tmp;
-  tmp = bytes[1];
-  bytes[1] = bytes[2];
-  bytes[2] = tmp;
-}
+// void byteswap32(void *ptr) {
+//   uint8_t *bytes = (uint8_t *)ptr;
+//   uint8_t tmp;
+//   tmp = bytes[0];
+//   bytes[0] = bytes[3];
+//   bytes[3] = tmp;
+//   tmp = bytes[1];
+//   bytes[1] = bytes[2];
+//   bytes[2] = tmp;
+// }
 
 class cuda_error : public std::runtime_error {
 public:
