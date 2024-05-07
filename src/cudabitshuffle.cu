@@ -99,6 +99,20 @@ uint32_t byteswap32(void *ptr) {
   return value;
 }
 
+void getBlockPointers(uint8_t *d_buffer, uint8_t **d_block_pointers) {
+  uint8_t *block = d_buffer + 12;
+  uint32_t image_size = (uint32_t) * (uint64_t *)d_buffer;
+  uint32_t n_block = image_size / 8192;
+  if (image_size % 8192)
+    n_block++;
+  for (int i = 0; i < n_block; i++) {
+    d_block_pointers[i] = block;
+    byteswap32(block);
+    uint32_t next = *(uint32_t *)block;
+    block += next + 4;
+  }
+}
+
 void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
                         uint8_t *decompressed_data, size_t decompressed_size) {
   cudaStream_t stream;
