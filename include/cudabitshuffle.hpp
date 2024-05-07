@@ -7,12 +7,12 @@
 #include <cuda_runtime.h>
 #include <fmt/core.h>
 #include <iostream>
-#include <nvcomp.hpp>
-#include <nvcomp/nvcompManagerFactory.hpp>
+#include <nvcomp/lz4.h>
 #include <stdio.h>
 
 void run_test();
 
 void print_array(uint8_t *d_buffer, int length, int index);
 
-void nvc_decompress(uint8_t *d_buffer);
+void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
+                        uint8_t *decompressed_data, size_t decompressed_size);

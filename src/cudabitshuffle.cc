@@ -179,11 +179,16 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
   // }
 
   // Copy the compressed chunk data to the device
-  cudaMemcpy(d_buffer, buffer.data(), buffer.size_bytes(),
+  cudaMemcpy(d_buffer, buffer.data() + 12, buffer.size_bytes(),
              cudaMemcpyHostToDevice);
 
   print_array(d_buffer, length, 0);
-  nvc_decompress(d_buffer);
+
+  // Create output buffer
+  uint8_t *d_out;
+  cudaMalloc(&d_out, width * height * sizeof(pixel_t));
+
+  decompress_lz4_gpu(d_buffer, length, d_out, width * height * sizeof(pixel_t));
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
@@ -210,9 +215,9 @@ int main() {
   // draw_image_data(host_decompressed_image.get(), 1640, 1690, 35, 40, width,
   //                 height);
 
-  // fmt::print("GPU Decompression\n");
+  fmt::print("GPU Decompression\n");
 
-  // gpu_decompress(&reader, &device_decompressed_image, 49);
+  gpu_decompress(&reader, &device_decompressed_image, 49);
 
   return 0;
 }

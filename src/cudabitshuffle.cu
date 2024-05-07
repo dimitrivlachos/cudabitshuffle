@@ -4,15 +4,6 @@
 
 #include "cudabitshuffle.hpp"
 
-#define CUDA_CHECK(call)                                                       \
-  do {                                                                         \
-    cudaError_t err = call;                                                    \
-    if (err != cudaSuccess) {                                                  \
-      printf("CUDA Error: %s: %s\n", cudaGetErrorName(err),                    \
-             cudaGetErrorString(err));                                         \
-    }                                                                          \
-  } while (0)
-
 //
 inline auto cuda_error_string(cudaError_t err) {
   const char *err_name = cudaGetErrorName(err);
@@ -52,60 +43,75 @@ __global__ void print_array_kernel(uint8_t *d_buffer, int length, int index) {
 
 __global__ void test() { printf("Hello from CUDA\n"); }
 
-void nvc_decompress(uint8_t *d_buffer) {
-  using namespace nvcomp;
+// void nvc_compress(uint8_t *d_buffer) {
+//   cudaStream_t stream;
+//   cudaStreamCreate(&stream);
+
+//   // Inirialize data on host
+//   size_t *host_uncompressed_bytes;
+//   const size_t chunk_size = 8192;
+//   const batch_size =
+// }
+
+void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
+                        uint8_t *decompressed_data, size_t decompressed_size) {
   cudaStream_t stream;
-  CUDA_CHECK(cudaStreamCreate(&stream));
-  printf("Creating manager\n");
-  uint8_t *comp_buffer;
+  cudaStreamCreate(&stream);
 
-  size_t buffer_size = sizeof(uint32_t) + 8192;
-  CUDA_CHECK(cudaMalloc(&comp_buffer, buffer_size));
-  CUDA_CHECK(
-      cudaMemcpy(comp_buffer, d_buffer, buffer_size, cudaMemcpyDeviceToDevice));
+  const size_t chunk_size = 8192;
+  const size_t batch_size = (compressed_size + chunk_size - 1) / chunk_size;
 
-  auto decomp_nvcomp_manager = create_manager(comp_buffer, stream);
+  // Allocate device memory for compressed data
+  uint8_t *device_compressed_data;
+  cudaMalloc(&device_compressed_data, compressed_size);
+  cudaMemcpyAsync(device_compressed_data, compressed_data, compressed_size,
+                  cudaMemcpyHostToDevice, stream);
 
-  printf("Configuring decompression\n");
-  DecompressionConfig decomp_config =
-      decomp_nvcomp_manager->configure_decompression(comp_buffer);
-  uint8_t *res_decomp_buffer;
+  // Allocate device memory for uncompressed data
+  uint8_t *device_decompressed_data;
+  cudaMalloc(&device_decompressed_data, decompressed_size);
 
-  printf("Allocating memory\n");
-  size_t available_memory, total_memory;
-  CUDA_CHECK(cudaMemGetInfo(&available_memory, &total_memory));
-  size_t decomp_data_size = decomp_config.decomp_data_size;
-  printf("Total memory: %lu bytes, Available memory: %lu bytes, decomp_size: "
-         "%lu\n",
-         total_memory, available_memory, decomp_data_size);
+  // Allocate temporary buffer for decompression
+  size_t decomp_temp_bytes;
+  nvcompBatchedLZ4DecompressGetTempSize(batch_size, chunk_size,
+                                        &decomp_temp_bytes);
+  void *device_decomp_temp;
+  cudaMalloc(&device_decomp_temp, decomp_temp_bytes);
 
-  if (decomp_data_size > available_memory) {
-    printf("Not enough memory for decompressed data\n");
+  // Allocate space for compressed chunk sizes
+  size_t *device_compressed_bytes;
+  cudaMalloc(&device_compressed_bytes, sizeof(size_t) * batch_size);
+
+  // Allocate space for uncompressed chunk sizes
+  size_t *device_decompressed_bytes;
+  cudaMalloc(&device_decompressed_bytes, sizeof(size_t) * batch_size);
+
+  // Decompress the data
+  nvcompStatus_t decomp_res = nvcompBatchedLZ4DecompressAsync(
+      reinterpret_cast<const void *const *>(&device_compressed_data),
+      &compressed_size, device_decompressed_bytes, device_decompressed_bytes,
+      batch_size, device_decomp_temp, decomp_temp_bytes,
+      reinterpret_cast<void *const *>(&device_compressed_data), nullptr,
+      stream);
+
+  if (decomp_res != nvcompSuccess) {
+    std::cerr << "Failed decompression!" << std::endl;
+    assert(decomp_res == nvcompSuccess);
   }
-  CUDA_CHECK(cudaMalloc(&res_decomp_buffer, decomp_data_size));
 
-  size_t d_buffer_size;
-  CUDA_CHECK(cudaMemGetInfo(nullptr, &d_buffer_size));
-  printf("Size of d_buffer: %lu bytes\n", d_buffer_size);
+  // Copy the decompressed data back to host memory
+  cudaMemcpyAsync(decompressed_data, device_decompressed_data,
+                  decompressed_size, cudaMemcpyDeviceToHost, stream);
 
-  size_t res_decomp_buffer_size;
-  CUDA_CHECK(cudaMemGetInfo(nullptr, &res_decomp_buffer_size));
-  printf("Size of res_decomp_buffer: %lu bytes\n", res_decomp_buffer_size);
+  cudaStreamSynchronize(stream);
 
-  printf("Decompressing\n");
-  // TODO: Fix this
-  /*
-
-  Decompressing
-  terminate called after throwing an instance of 'std::runtime_error'
-    what():  Encountered Cuda Error: 2: 'out of memory'.
-  Aborted (core dumped)
-
-  */
-  decomp_nvcomp_manager->decompress(res_decomp_buffer, d_buffer, decomp_config);
-
-  printf("Printing decompressed array\n");
-  print_array(res_decomp_buffer, decomp_config.decomp_data_size, 0);
+  // Free device memory
+  cudaFree(device_compressed_data);
+  cudaFree(device_decompressed_data);
+  cudaFree(device_decomp_temp);
+  cudaFree(device_compressed_bytes);
+  cudaFree(device_decompressed_bytes);
+  cudaStreamDestroy(stream);
 }
 
 void run_test() {
