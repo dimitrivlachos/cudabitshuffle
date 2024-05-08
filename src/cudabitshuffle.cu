@@ -104,8 +104,8 @@ __device__ uint32_t byteswap32(void *ptr) {
  * @param d_buffer: Pointer to the buffer
  * @param d_block_pointers: Pointer to the array of pointers to the blocks
  */
-__device__ void getBlockPointers(uint8_t *d_buffer,
-                                 uint8_t **d_block_pointers) {
+__global__ void getBlockPointersKernel(uint8_t *d_buffer,
+                                       uint8_t **d_block_pointers) {
   uint8_t *block = d_buffer + 12;
   uint32_t image_size = (uint32_t) * (uint64_t *)d_buffer;
   uint32_t n_block = image_size / 8192;
@@ -117,6 +117,17 @@ __device__ void getBlockPointers(uint8_t *d_buffer,
     uint32_t next = *(uint32_t *)block;
     block += next + 4;
   }
+}
+
+/**
+ * @brief: Get the size of the decompressed data
+ * @param d_buffer: Pointer to the buffer
+ * @param d_block_pointers: Pointer to the array of pointers to the blocks
+ */
+void getBlockPointers(uint8_t *d_buffer, uint8_t **d_block_pointers) {
+  getBlockPointersKernel<<<1, 1>>>(d_buffer, d_block_pointers);
+  cuda_throw_error();
+  cudaDeviceSynchronize();
 }
 
 void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
@@ -131,7 +142,7 @@ void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
 
   // Allocate device memory for list of pointers to compressed blocks
   void **device_compressed_ptrs;
-  cudaMalloc(&device_compressed_ptrs, sizeof(size_t) * batch_size);
+  cudaMalloc(&device_compressed_ptrs, sizeof(uint8_t *) * batch_size);
 
   // Get the pointers to the compressed blocks
   getBlockPointers((uint8_t *)compressed_data,
@@ -140,10 +151,12 @@ void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
   // Allocate device memory for the compressed bytes
   size_t *device_compressed_bytes;
   cudaMalloc(&device_compressed_bytes, sizeof(size_t) * batch_size);
+  device_compressed_bytes = (size_t *)compressed_size;
 
   // Allocate device memory for the uncompressed bytes
   size_t *device_uncompressed_bytes;
   cudaMalloc(&device_uncompressed_bytes, sizeof(size_t) * batch_size);
+  device_uncompressed_bytes = (size_t *)decompressed_size;
 
   // Get the size of the decompressed data
   nvcompBatchedLZ4GetDecompressSizeAsync(

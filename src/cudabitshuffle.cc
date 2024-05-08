@@ -18,7 +18,7 @@ using pixel_t = H5Read::image_type;
 //   tmp = bytes[3];
 //   bytes[3] = bytes[4];
 //   bytes[4] = tmp;
-}
+// }
 
 // void byteswap32(void *ptr) {
 //   uint8_t *bytes = (uint8_t *)ptr;
