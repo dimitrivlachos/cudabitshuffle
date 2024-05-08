@@ -58,7 +58,7 @@ __global__ void test() { printf("Hello from CUDA\n"); }
  * @param ptr: Pointer to the 64-bit header
  * @return: The byteswapped value of the header
  */
-uint64_t byteswap64(const void *ptr) {
+__device__ uint64_t byteswap64(const void *ptr) {
   uint64_t value;
   memcpy(&value, ptr, sizeof(uint64_t));
   uint8_t *bytes = (uint8_t *)&value;
@@ -84,7 +84,7 @@ uint64_t byteswap64(const void *ptr) {
  * @param ptr: Pointer to the 32-bit header
  * @return: The byteswapped value of the header
  */
-uint32_t byteswap32(void *ptr) {
+__device__ uint32_t byteswap32(void *ptr) {
   uint32_t value;
   memcpy(&value, ptr, sizeof(uint32_t));
   uint8_t *bytes = (uint8_t *)&value;
@@ -99,7 +99,13 @@ uint32_t byteswap32(void *ptr) {
   return value;
 }
 
-void getBlockPointers(uint8_t *d_buffer, uint8_t **d_block_pointers) {
+/**
+ * @brief: Get the pointers to the blocks in the buffer
+ * @param d_buffer: Pointer to the buffer
+ * @param d_block_pointers: Pointer to the array of pointers to the blocks
+ */
+__device__ void getBlockPointers(uint8_t *d_buffer,
+                                 uint8_t **d_block_pointers) {
   uint8_t *block = d_buffer + 12;
   uint32_t image_size = (uint32_t) * (uint64_t *)d_buffer;
   uint32_t n_block = image_size / 8192;
@@ -118,60 +124,15 @@ void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
   cudaStream_t stream;
   cudaStreamCreate(&stream);
 
-  const size_t chunk_size = 8192;
-  const size_t batch_size = (compressed_size + chunk_size - 1) / chunk_size;
-
-  // Allocate device memory for compressed data
-  uint8_t *device_compressed_data;
-  cudaMalloc(&device_compressed_data, compressed_size);
-  cudaMemcpyAsync(device_compressed_data, compressed_data, compressed_size,
-                  cudaMemcpyHostToDevice, stream);
-
-  // Allocate device memory for uncompressed data
-  uint8_t *device_decompressed_data;
-  cudaMalloc(&device_decompressed_data, decompressed_size);
-
-  // Allocate temporary buffer for decompression
-  size_t decomp_temp_bytes;
-  nvcompBatchedLZ4DecompressGetTempSize(batch_size, chunk_size,
-                                        &decomp_temp_bytes);
-  void *device_decomp_temp;
-  cudaMalloc(&device_decomp_temp, decomp_temp_bytes);
-
-  // Allocate space for compressed chunk sizes
+  size_t chunk_size = 8192;
+  size_t batch_size = (compressed_size + chunk_size - 1) / chunk_size;
+  void **device_compressed_ptrs;
   size_t *device_compressed_bytes;
-  cudaMalloc(&device_compressed_bytes, sizeof(size_t) * batch_size);
+  void **device_uncompressed_bytes;
 
-  // Allocate space for uncompressed chunk sizes
-  size_t *device_decompressed_bytes;
-  cudaMalloc(&device_decompressed_bytes, sizeof(size_t) * batch_size);
-
-  // Decompress the data
-  nvcompStatus_t decomp_res = nvcompBatchedLZ4DecompressAsync(
-      reinterpret_cast<const void *const *>(&device_compressed_data),
-      &compressed_size, device_decompressed_bytes, device_decompressed_bytes,
-      batch_size, device_decomp_temp, decomp_temp_bytes,
-      reinterpret_cast<void *const *>(&device_compressed_data), nullptr,
-      stream);
-
-  if (decomp_res != nvcompSuccess) {
-    std::cerr << "Failed decompression!" << std::endl;
-    assert(decomp_res == nvcompSuccess);
-  }
-
-  // Copy the decompressed data back to host memory
-  cudaMemcpyAsync(decompressed_data, device_decompressed_data,
-                  decompressed_size, cudaMemcpyDeviceToHost, stream);
-
-  cudaStreamSynchronize(stream);
-
-  // Free device memory
-  cudaFree(device_compressed_data);
-  cudaFree(device_decompressed_data);
-  cudaFree(device_decomp_temp);
-  cudaFree(device_compressed_bytes);
-  cudaFree(device_decompressed_bytes);
-  cudaStreamDestroy(stream);
+  nvcompBatchedLZ4GetDecompressSizeAsync(
+      device_compressed_ptrs, device_compressed_bytes,
+      device_uncompressed_bytes, batch_size, stream);
 }
 
 void run_test() {
