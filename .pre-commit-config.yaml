@@ -4,6 +4,7 @@ repos:
   hooks:
   - id: clang-format
     files: \.c(c|pp|xx|u)?$|\.h(pp)?$
+    autostage: true
 - repo: https://github.com/charliermarsh/ruff-pre-commit
   rev: v0.4.3
   hooks:
