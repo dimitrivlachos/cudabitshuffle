@@ -95,6 +95,102 @@ public:
   size_t pitch;
 };
 
+void print_bytes(void *buffer, int length) {
+  uint8_t *bytes = (uint8_t *)buffer;
+  for (int i = 0; i < length; i++) {
+    std::cout << (int)bytes[i] << " ";
+  }
+  std::cout << std::endl;
+}
+
+/**
+ * @brief: Swap the bytes of a 64-bit integer in place
+ * @param: ptr - pointer to the 64-bit integer
+ */
+void byteswap64(const void *ptr) {
+  printf("Byteswap64\n");
+  // Print first 64 bytes of the buffer
+  print_bytes((void *)ptr, 64);
+  uint8_t *bytes = (uint8_t *)ptr;
+  uint8_t tmp;
+  tmp = bytes[0];
+  bytes[0] = bytes[7];
+  bytes[7] = tmp;
+  tmp = bytes[1];
+  bytes[1] = bytes[6];
+  bytes[6] = tmp;
+  tmp = bytes[2];
+  bytes[2] = bytes[5];
+  bytes[5] = tmp;
+  tmp = bytes[3];
+  bytes[3] = bytes[4];
+  bytes[4] = tmp;
+  // Print first 64 bytes of the buffer
+  print_bytes((void *)ptr, 64);
+}
+
+/**
+ * @brief: Swap the bytes of a 32-bit integer in place
+ * @param: ptr - pointer to the 32-bit intege
+ */
+void byteswap32(void *ptr) {
+  // printf("Byteswap32\n");
+  // Print first 32 bytes of the buffer
+  // print_bytes(ptr, 32)
+  uint8_t *bytes = (uint8_t *)ptr;
+  uint8_t tmp;
+  tmp = bytes[0];
+  bytes[0] = bytes[3];
+  bytes[3] = tmp;
+  tmp = bytes[1];
+  bytes[1] = bytes[2];
+  bytes[2] = tmp;
+  // Print first 32 bytes of the buffer
+  // print_bytes(ptr, 32);
+}
+
+std::vector<int> get_block_offsets(uint8_t *buffer) {
+  std::vector<int> block_offsets;
+
+  printf("Byteswap the header\n");
+  print_bytes(buffer, 20);
+  // Byteswap the header
+  byteswap64(buffer);
+  byteswap32(buffer + 8);
+
+  // Now byte swap the block headers
+  printf("Buffer: %p\n", buffer);
+  print_bytes(buffer, 20);
+  uint8_t *block = buffer + 12; // Skip the header
+  printf("Block: %p\n", block);
+  print_bytes(block, 20);
+  uint32_t image_size = (uint32_t) * (uint64_t *)buffer;
+  printf("Image size: %d\n", image_size);
+  uint32_t n_block = image_size / 8192;
+  printf("Number of blocks: %d\n", n_block);
+  if (image_size % 8192)
+    n_block++;
+  fmt::print(fg(fmt::color::yellow), "Begin block offsets\n");
+  for (int i = 0; i < n_block; i++) {
+    if (i < 10) {
+      printf("Block: %p\n", block);
+      print_bytes(block, 20);
+    }
+    // print_bytes(block, 20);
+    byteswap32(block);
+    // printf("Block byteswapped32\n");
+    // print_bytes(block, 20);
+    // printf("\n");
+    uint32_t next = *(uint32_t *)block;
+    auto dist_to_next = std::distance(buffer, block + next + 4);
+    block_offsets.push_back(next);
+    // fmt::print("Block offset: {}\n", next);
+    block += next + 4;
+  }
+
+  return block_offsets;
+}
+
 void cpu_decompress(H5Read *reader, std::shared_ptr<pixel_t[]> *out,
                     int chunk_index) {
   // Get the image width and height
@@ -163,6 +259,22 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
   }
   std::cout << std::endl;
 
+  // Make a copy of buffer for testing
+  std::vector<uint8_t> vbuffer_copy(buffer.begin(), buffer.end());
+  SPAN<uint8_t> buffer_copy(vbuffer_copy);
+
+  printf("Buffer bytes\n");
+  // Print the first 12 bytes of buffer.data()
+  for (int i = 0; i < 12; i++) {
+    std::cout << (int)buffer[i] << " ";
+  }
+  printf("\n");
+  // Print the first 12 bytes of buffer_copy.data()
+  for (int i = 0; i < 12; i++) {
+    std::cout << (int)buffer_copy[i] << " ";
+  }
+  printf("\n\n");
+
   // byte swap the header
   // byteswap64(buffer.data());
   // byteswap32(buffer.data() + 8);
@@ -173,6 +285,10 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
   // uint32_t n_block = image_size / 8192;
   // if (image_size % 8192) n_block ++;
   // for (int i = 0; i < n_block; i++) {
+  //   if (i < 10) {
+  //     printf("Block: %p\n", block);
+  //   print_bytes(block, 20);
+  //   }
   //   byteswap32(block);
   //   uint32_t next = *(uint32_t *) block;
   //   block += next + 4;
@@ -188,7 +304,15 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
   uint8_t *d_out;
   cudaMalloc(&d_out, width * height * sizeof(pixel_t));
 
-  decompress_lz4_gpu(d_buffer, length, d_out, width * height * sizeof(pixel_t));
+  // Get the block offsets
+  printf("\n\nMy byteswap\n");
+  auto block_offsets = get_block_offsets(buffer_copy.data());
+  // for (int i = 0; i < block_offsets.size(); i++) {
+  //   fmt::print("Block offset: {}\n", block_offsets[i]);
+  // }
+
+  // decompress_lz4_gpu(d_buffer, length, d_out, width * height *
+  // sizeof(pixel_t), block_offsets);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
