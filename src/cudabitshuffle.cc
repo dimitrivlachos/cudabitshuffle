@@ -149,41 +149,44 @@ void byteswap32(void *ptr) {
   // print_bytes(ptr, 32);
 }
 
-std::vector<int> get_block_offsets(uint8_t *buffer) {
+std::vector<int> get_absolute_block_offsets(uint8_t *buffer) {
   std::vector<int> block_offsets;
 
-  printf("Byteswap the header\n");
-  print_bytes(buffer, 20);
   // Byteswap the header
   byteswap64(buffer);
   byteswap32(buffer + 8);
 
   // Now byte swap the block headers
-  printf("Buffer: %p\n", buffer);
-  print_bytes(buffer, 20);
+  // printf("Buffer: %p\n", buffer);
+  // print_bytes(buffer, 20);
   uint8_t *block = buffer + 12; // Skip the header
-  printf("Block: %p\n", block);
-  print_bytes(block, 20);
+  // printf("Block: %p\n", block);
+  // print_bytes(block, 20);
   uint32_t image_size = (uint32_t) * (uint64_t *)buffer;
-  printf("Image size: %d\n", image_size);
+  // printf("Image size: %d\n", image_size);
   uint32_t n_block = image_size / 8192;
-  printf("Number of blocks: %d\n", n_block);
+  // printf("Number of blocks: %d\n", n_block);
   if (image_size % 8192)
     n_block++;
-  fmt::print(fg(fmt::color::yellow), "Begin block offsets\n");
+  // fmt::print(fg(fmt::color::yellow), "Begin block offsets\n");
+  int cumulative_offset = 0;                  // First block starts at 0
+  block_offsets.push_back(cumulative_offset); // First block starts at 0
   for (int i = 0; i < n_block; i++) {
-    if (i < 10) {
-      printf("Block: %p\n", block);
-      print_bytes(block, 20);
-    }
+    // if (i < 10) {
+    //   printf("Block: %p\n", block);
+    //   print_bytes(block, 20);
+    // }
     // print_bytes(block, 20);
     byteswap32(block);
     // printf("Block byteswapped32\n");
     // print_bytes(block, 20);
     // printf("\n");
     uint32_t next = *(uint32_t *)block;
-    auto dist_to_next = std::distance(buffer, block + next + 4);
-    block_offsets.push_back(next);
+    auto dist_to_next = std::distance(block, block + next + 4);
+    cumulative_offset += dist_to_next;
+    if (cumulative_offset > 1000000000)
+      printf("Cumulative offset: %d\n", cumulative_offset);
+    block_offsets.push_back(cumulative_offset);
     // fmt::print("Block offset: {}\n", next);
     block += next + 4;
   }
@@ -306,13 +309,13 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
 
   // Get the block offsets
   printf("\n\nMy byteswap\n");
-  auto block_offsets = get_block_offsets(buffer_copy.data());
-  // for (int i = 0; i < block_offsets.size(); i++) {
-  //   fmt::print("Block offset: {}\n", block_offsets[i]);
-  // }
+  auto absolute_block_offsets = get_absolute_block_offsets(buffer.data());
+  for (int i = 0; i < 10; i++) {
+    fmt::print("Block offset: {}\n", absolute_block_offsets[i]);
+  }
 
-  // decompress_lz4_gpu(d_buffer, length, d_out, width * height *
-  // sizeof(pixel_t), block_offsets);
+  decompress_lz4_gpu(d_buffer, length, d_out, width * height * sizeof(pixel_t),
+                     absolute_block_offsets);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
