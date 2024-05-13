@@ -149,6 +149,13 @@ void byteswap32(void *ptr) {
   // print_bytes(ptr, 32);
 }
 
+/**
+ * @brief: Get the absolute block offsets from the compressed chunk data
+ * we get absolute block offsets because this allows the device to
+ * calculate the block offsets in device memory in parallel
+ * @param: buffer - pointer to the compressed chunk data
+ * @return: vector of absolute block offsets
+ */
 std::vector<int> get_absolute_block_offsets(uint8_t *buffer) {
   std::vector<int> block_offsets;
 
@@ -168,28 +175,24 @@ std::vector<int> get_absolute_block_offsets(uint8_t *buffer) {
   // printf("Number of blocks: %d\n", n_block);
   if (image_size % 8192)
     n_block++;
-  // fmt::print(fg(fmt::color::yellow), "Begin block offsets\n");
   int cumulative_offset = 0;                  // First block starts at 0
   block_offsets.push_back(cumulative_offset); // First block starts at 0
+  printf("Block offsets size: %d\n", block_offsets.size());
   for (int i = 0; i < n_block; i++) {
-    // if (i < 10) {
-    //   printf("Block: %p\n", block);
-    //   print_bytes(block, 20);
-    // }
-    // print_bytes(block, 20);
     byteswap32(block);
-    // printf("Block byteswapped32\n");
-    // print_bytes(block, 20);
-    // printf("\n");
     uint32_t next = *(uint32_t *)block;
     auto dist_to_next = std::distance(block, block + next + 4);
     cumulative_offset += dist_to_next;
     if (cumulative_offset > 1000000000)
       printf("Cumulative offset: %d\n", cumulative_offset);
+    if (i > 4410)
+      fmt::print("gabo Block offset {}: {}\n", i, cumulative_offset);
     block_offsets.push_back(cumulative_offset);
     // fmt::print("Block offset: {}\n", next);
     block += next + 4;
   }
+
+  printf("Block offsets size: %d\n", block_offsets.size());
 
   return block_offsets;
 }

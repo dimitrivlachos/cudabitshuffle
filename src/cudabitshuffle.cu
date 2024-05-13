@@ -17,6 +17,8 @@ inline auto cuda_throw_error() -> void {
   if (err != cudaSuccess) {
     printf("CUDA Error: %s: %s\n", cudaGetErrorName(err),
            cudaGetErrorString(err));
+  } else {
+    printf("No CUDA error\n");
   }
 }
 
@@ -63,6 +65,10 @@ block_offset_to_pointers_kernel(const uint8_t *d_compressed_data,
     // Move the pointer to the block offset
     current_ptr += d_block_offsets[i];
 
+    if (i < 10 || i > 4400) {
+      printf("Current pointer %d: %p\n", i, current_ptr);
+    }
+
     // Set the pointer to the compressed block
     d_compressed_ptrs[i] = (void *)current_ptr;
   }
@@ -91,6 +97,7 @@ void block_offset_to_pointers(const uint8_t *d_compressed_data,
   printf("block_offset 4419: %d\n", block_offsets[4419]);
   block_offset_to_pointers_kernel<<<blocks, threads>>>(
       d_compressed_data, d_block_offsets, d_compressed_ptrs, num_blocks);
+  printf("Done with kernel\n");
 
   cuda_throw_error();
   cudaDeviceSynchronize();
@@ -124,11 +131,6 @@ void decompress_lz4_gpu(const uint8_t *d_compressed_data,
 
   block_offset_to_pointers(d_compressed_data, absolute_block_offsets,
                            device_compressed_ptrs);
-
-  // Print the first 10 block pointers
-  for (int i = 0; i < 10; i++) {
-    fmt::print("Block pointer: {}\n", device_compressed_ptrs[i]);
-  }
 
   // // Get the pointers to the compressed blocks
   // getBlockPointers((uint8_t *)compressed_data,
