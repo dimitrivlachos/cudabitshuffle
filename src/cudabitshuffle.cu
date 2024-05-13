@@ -77,7 +77,6 @@ block_offset_to_pointers_kernel(const uint8_t *d_compressed_data,
 void block_offset_to_pointers(const uint8_t *d_compressed_data,
                               const std::vector<int> &block_offsets,
                               void **d_compressed_ptrs) {
-  printf("Converting block offsets to pointers\n");
   // Copy block_offsets to device memory
   int *d_block_offsets;
   cudaMalloc((void **)&d_block_offsets, block_offsets.size() * sizeof(int));
@@ -86,18 +85,11 @@ void block_offset_to_pointers(const uint8_t *d_compressed_data,
 
   // Launch kernel
   int num_blocks = block_offsets.size();
-  printf("Launching kernel - num_blocks: %d\n", num_blocks);
-  printf("Size of d_block_offsets: %d\n", block_offsets.size());
   dim3 blocks((num_blocks + 255) /
               256); // Create enough blocks to cover all the indices
   dim3 threads(256);
-  printf("Blocks: %d, Threads: %d\n", blocks.x, threads.x);
-  printf("block_offsets size: %d\n", block_offsets.size());
-  printf("block_offset 4418: %d\n", block_offsets[4418]);
-  printf("block_offset 4419: %d\n", block_offsets[4419]);
   block_offset_to_pointers_kernel<<<blocks, threads>>>(
       d_compressed_data, d_block_offsets, d_compressed_ptrs, num_blocks);
-  printf("Done with kernel\n");
 
   cuda_throw_error();
   cudaDeviceSynchronize();
@@ -122,7 +114,6 @@ void decompress_lz4_gpu(const uint8_t *d_compressed_data,
   // // Allocate device memory for list of pointers to compressed blocks
   void **device_compressed_ptrs;
   cudaMalloc(&device_compressed_ptrs, sizeof(uint8_t *) * batch_size);
-  printf("Batch size: %d\n", batch_size);
 
   // copy block offsets to device
   int *device_block_offsets;
@@ -132,26 +123,20 @@ void decompress_lz4_gpu(const uint8_t *d_compressed_data,
   block_offset_to_pointers(d_compressed_data, absolute_block_offsets,
                            device_compressed_ptrs);
 
-  // // Get the pointers to the compressed blocks
-  // getBlockPointers((uint8_t *)compressed_data,
-  //                  (uint8_t **)device_compressed_ptrs, compressed_size);
-
   // // Allocate device memory for the compressed bytes
-  // size_t *device_compressed_bytes;
-  // cudaMalloc(&device_compressed_bytes, sizeof(size_t) * batch_size);
-  // device_compressed_bytes = (size_t *)compressed_size;
+  size_t *device_compressed_bytes;
+  cudaMalloc(&device_compressed_bytes, sizeof(size_t) * batch_size);
+  device_compressed_bytes = (size_t *)compressed_size;
 
   // // Allocate device memory for the uncompressed bytes
-  // size_t *device_uncompressed_bytes;
-  // cudaMalloc(&device_uncompressed_bytes, sizeof(size_t) * batch_size);
-  // device_uncompressed_bytes = (size_t *)decompressed_size;
+  size_t *device_uncompressed_bytes;
+  cudaMalloc(&device_uncompressed_bytes, sizeof(size_t) * batch_size);
+  device_uncompressed_bytes = (size_t *)decompressed_size;
 
   // // Get the size of the decompressed data
-  // nvcompBatchedLZ4GetDecompressSizeAsync(
-  //     device_compressed_ptrs, device_compressed_bytes,
-  //     device_uncompressed_bytes, batch_size, stream);
-
-  // fmt::print("Decompressed size: {}\n", device_uncompressed_bytes[0]);
+  nvcompBatchedLZ4GetDecompressSizeAsync(
+      device_compressed_ptrs, device_compressed_bytes,
+      device_uncompressed_bytes, batch_size, stream);
 }
 
 void run_test() {

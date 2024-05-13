@@ -108,9 +108,6 @@ void print_bytes(void *buffer, int length) {
  * @param: ptr - pointer to the 64-bit integer
  */
 void byteswap64(const void *ptr) {
-  printf("Byteswap64\n");
-  // Print first 64 bytes of the buffer
-  print_bytes((void *)ptr, 64);
   uint8_t *bytes = (uint8_t *)ptr;
   uint8_t tmp;
   tmp = bytes[0];
@@ -125,8 +122,6 @@ void byteswap64(const void *ptr) {
   tmp = bytes[3];
   bytes[3] = bytes[4];
   bytes[4] = tmp;
-  // Print first 64 bytes of the buffer
-  print_bytes((void *)ptr, 64);
 }
 
 /**
@@ -134,9 +129,6 @@ void byteswap64(const void *ptr) {
  * @param: ptr - pointer to the 32-bit intege
  */
 void byteswap32(void *ptr) {
-  // printf("Byteswap32\n");
-  // Print first 32 bytes of the buffer
-  // print_bytes(ptr, 32)
   uint8_t *bytes = (uint8_t *)ptr;
   uint8_t tmp;
   tmp = bytes[0];
@@ -145,8 +137,6 @@ void byteswap32(void *ptr) {
   tmp = bytes[1];
   bytes[1] = bytes[2];
   bytes[2] = tmp;
-  // Print first 32 bytes of the buffer
-  // print_bytes(ptr, 32);
 }
 
 /**
@@ -164,15 +154,9 @@ std::vector<int> get_absolute_block_offsets(uint8_t *buffer) {
   byteswap32(buffer + 8);
 
   // Now byte swap the block headers
-  // printf("Buffer: %p\n", buffer);
-  // print_bytes(buffer, 20);
   uint8_t *block = buffer + 12; // Skip the header
-  // printf("Block: %p\n", block);
-  // print_bytes(block, 20);
   uint32_t image_size = (uint32_t) * (uint64_t *)buffer;
-  // printf("Image size: %d\n", image_size);
   uint32_t n_block = image_size / 8192;
-  // printf("Number of blocks: %d\n", n_block);
   if (image_size % 8192)
     n_block++;
   int cumulative_offset = 0;                  // First block starts at 0
@@ -188,12 +172,8 @@ std::vector<int> get_absolute_block_offsets(uint8_t *buffer) {
     if (i > 4410)
       fmt::print("gabo Block offset {}: {}\n", i, cumulative_offset);
     block_offsets.push_back(cumulative_offset);
-    // fmt::print("Block offset: {}\n", next);
     block += next + 4;
   }
-
-  printf("Block offsets size: %d\n", block_offsets.size());
-
   return block_offsets;
 }
 
