@@ -18,8 +18,8 @@ using std::span;
 #endif
 
 template <typename T1, typename... TS>
-auto with_formatting(const std::string &code, const T1 &first, TS... args)
-    -> std::string {
+auto with_formatting(const std::string &code, const T1 &first,
+                     TS... args) -> std::string {
   return code + fmt::format(fmt::format("{}", first), args...) + "\033[0m";
 }
 
@@ -212,8 +212,8 @@ auto count_nonzero(const T *data, I width, I height, I2 pitch = 0) -> size_t {
   return strong;
 }
 template <typename T, typename I, typename I2 = size_t>
-auto count_nonzero(const span<const T> data, I width, I height, I2 pitch = 0)
-    -> size_t {
+auto count_nonzero(const span<const T> data, I width, I height,
+                   I2 pitch = 0) -> size_t {
   return count_nonzero(data.data(), width, height, pitch);
 }
 #endif
