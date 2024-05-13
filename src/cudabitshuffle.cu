@@ -4,7 +4,6 @@
 
 #include "cudabitshuffle.hpp"
 
-//
 inline auto cuda_error_string(cudaError_t err) {
   const char *err_name = cudaGetErrorName(err);
   const char *err_str = cudaGetErrorString(err);
@@ -22,19 +21,26 @@ inline auto cuda_throw_error() -> void {
   }
 }
 
-__global__ void cuda_bitshuffle(unsigned int *d_input, unsigned int *d_output,
-                                int numElements, int numBits) {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < numElements) {
-    unsigned int input = d_input[idx];
-    unsigned int output = 0;
-    for (int i = 0; i < numBits; i++) {
-      output |= ((input >> i) & 1) << (numBits - 1 - i);
-    }
-    d_output[idx] = output;
-  }
-}
+// __global__ void cuda_bitshuffle(unsigned int *d_input, unsigned int
+// *d_output,
+//                                 int numElements, int numBits) {
+//   int idx = blockIdx.x * blockDim.x + threadIdx.x;
+//   if (idx < numElements) {
+//     unsigned int input = d_input[idx];
+//     unsigned int output = 0;
+//     for (int i = 0; i < numBits; i++) {
+//       output |= ((input >> i) & 1) << (numBits - 1 - i);
+//     }
+//     d_output[idx] = output;
+//   }
+// }
 
+/**
+ * @brief Kernel to print an array on the GPU
+ * @param d_buffer The buffer to print
+ * @param length The length of the buffer to print
+ * @param index The index to start printing from
+ */
 __global__ void print_array_kernel(uint8_t *d_buffer, int length, int index) {
   int limit = min(index + 50, length);
   for (int i = index; i < limit; i++) {
@@ -43,8 +49,14 @@ __global__ void print_array_kernel(uint8_t *d_buffer, int length, int index) {
   printf("\n");
 }
 
-__global__ void test() { printf("Hello from CUDA\n"); }
-
+/**
+ * @brief Kernel to convert block offsets to gpu pointers, this replaces
+ * the need for a for loop and more optimally utilises the GPU
+ * @param d_compressed_data The compressed data on the device
+ * @param d_block_offsets The offsets of the compressed blocks
+ * @param d_compressed_ptrs The output pointers to the compressed blocks
+ * @param num_blocks The number of blocks
+ */
 __global__ void
 block_offset_to_pointers_kernel(const uint8_t *d_compressed_data,
                                 const int *d_block_offsets,
@@ -53,12 +65,6 @@ block_offset_to_pointers_kernel(const uint8_t *d_compressed_data,
   int i = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (i < num_blocks) {
-    if (i > 4400) {
-      printf("Index: %d\n", i);
-    }
-    if (i == 4419) {
-      printf("Too high");
-    }
     // Initialize the pointer to the beginning of the compressed data
     const uint8_t *current_ptr = d_compressed_data;
 
@@ -74,6 +80,12 @@ block_offset_to_pointers_kernel(const uint8_t *d_compressed_data,
   }
 }
 
+/**
+ * @brief Converts the block offsets to gpu memory pointers
+ * @param d_compressed_data The compressed data on the device
+ * @param block_offsets The offsets of the compressed blocks
+ * @param d_compressed_ptrs The output pointers to the compressed blocks
+ */
 void block_offset_to_pointers(const uint8_t *d_compressed_data,
                               const std::vector<int> &block_offsets,
                               void **d_compressed_ptrs) {
@@ -98,6 +110,30 @@ void block_offset_to_pointers(const uint8_t *d_compressed_data,
   cudaFree(d_block_offsets);
 }
 
+/**
+ * @brief Decompresses the data using bitshuffle and LZ4 on the GPU
+ * @param h_compressed_data The compressed data on the host
+ * @param h_decompressed_data The decompressed data on the host
+ * @param compressed_size The size of the compressed data
+ * @param decompressed_size The size of the decompressed data
+ * @param block_offsets The offsets of the compressed blocksl
+ */
+void bshuf_decompress_lz4_gpu(const uint8_t *h_compressed_data,
+                              uint8_t *h_decompressed_data,
+                              size_t compressed_size, size_t decompressed_size,
+                              const std::vector<int> &block_offsets) {
+
+  // Allocate device memory for the compressed data
+  uint8_t *d_compressed_data;
+  cudaMalloc(&d_compressed_data, compressed_size);
+  cudaMemcpy(d_compressed_data, h_compressed_data, compressed_size,
+             cudaMemcpyHostToDevice);
+
+  // Allocate device memory for the decompressed data
+  uint8_t *d_decompressed_data;
+  cudaMalloc(&d_decompressed_data, decompressed_size);
+}
+
 void decompress_lz4_gpu(const uint8_t *d_compressed_data,
                         size_t compressed_size, uint8_t *d_decompressed_data,
                         size_t decompressed_size,
@@ -107,7 +143,7 @@ void decompress_lz4_gpu(const uint8_t *d_compressed_data,
   cudaStream_t stream;
   cudaStreamCreate(&stream);
 
-  // // Set chunk size and batch size
+  // Set chunk size and batch size
   size_t chunk_size = 8192;
   size_t batch_size = ((compressed_size + chunk_size - 1) / chunk_size) + 1;
 
@@ -181,12 +217,6 @@ void decompress_lz4_gpu(const uint8_t *d_compressed_data,
 
   // Wait for the decompression to finish
   cudaStreamSynchronize(stream);
-}
-
-void run_test() {
-  test<<<1, 1>>>();
-  cuda_throw_error();
-  cudaDeviceSynchronize();
 }
 
 void print_array(uint8_t *d_buffer, int length, int index) {
