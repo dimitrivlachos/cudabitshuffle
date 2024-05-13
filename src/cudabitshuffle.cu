@@ -164,7 +164,7 @@ void decompress_lz4_gpu(const uint8_t *d_compressed_data,
   // Decompress the data
   // This decompresses each input, device_compressed_ptrs[i], and places the
   // decompressed result in the corresponding output list,
-  // device_uncompressed_ptrs[i]. It also writes the size of the uncompressed
+  // d_uncompressed_ptrs[i]. It also writes the size of the uncompressed
   // data to d_uncompressed_bytes[i].
   nvcompStatus_t decomp_res = nvcompBatchedLZ4DecompressAsync(
       d_compressed_ptrs, d_compressed_bytes, d_uncompressed_bytes,
