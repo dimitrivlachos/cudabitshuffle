@@ -18,3 +18,6 @@ void print_array(uint8_t *d_buffer, int length, int index);
 void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
                         uint8_t *decompressed_data, size_t decompressed_size,
                         const std::vector<int> &absolute_block_offsets);
+
+// Define the pixel type
+using pixel_t = H5Read::image_type;
