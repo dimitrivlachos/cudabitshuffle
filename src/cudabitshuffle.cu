@@ -131,7 +131,17 @@ void get_block_size_and_offset(uint8_t *h_buffer,
     h_block_offsets_absolute.push_back(
         cumulative_offset); // Add the offset to the block offsets
     block += next + 4;      // Move to the next block
+    if (i < 10 || i > 4400) {
+      printf("%d: Next: %d, Cumulative: %d, Block: %p, Block offset size: %d\n",
+             i, next, cumulative_offset, block,
+             h_block_offsets_absolute.size());
+    }
   }
+  // Remove the last block offset as it is not needed
+  h_block_offsets_absolute.pop_back();
+  // Print the sizes of h_block_offsets_absolute and h_block_sizes
+  printf("Block offsets size: %d\n", h_block_offsets_absolute.size());
+  printf("Block sizes size: %d\n", h_block_sizes.size());
 }
 
 /**
