@@ -41,7 +41,7 @@ inline auto cuda_throw_error() -> void {
  * @brief: Swap the bytes of a 64-bit integer in place
  * @param: ptr - pointer to the 64-bit integer
  */
-void byteswap64(const void *ptr) {
+void byteswap64(void *ptr) {
   uint8_t *bytes = (uint8_t *)ptr;
   uint8_t tmp;
   tmp = bytes[0];
@@ -104,7 +104,13 @@ void get_block_size_and_offset(uint8_t *h_buffer,
   byteswap32(h_buffer + 8);
 
   // Now byte swap the block headers
-  uint8_t *block = h_buffer + 12;                          // Skip header
+  uint8_t *block = h_buffer + 12; // Skip header
+  printf("Block: %p\n", block);
+  // print first 24 bytes of the block
+  for (int i = 0; i < 24; i++) {
+    printf("%d ", block[i]);
+  }
+  printf("\n");
   uint32_t image_size = (uint32_t) * (uint64_t *)h_buffer; // Get the image size
   uint32_t n_block = image_size / CHUNK_SIZE; // Calculate the number of blocks
   if (image_size % CHUNK_SIZE) { // If there is a remainder, add one more block
@@ -117,11 +123,11 @@ void get_block_size_and_offset(uint8_t *h_buffer,
   for (int i = 0; i < n_block; i++) {   // Iterate over the blocks
     byteswap32(block);                  // Byteswap the block header
     uint32_t next = *(uint32_t *)block; // Get the size of the block
-    auto dist_to_next = std::distance(
-        block, block + next + 4); // Calculate the distance to the next block
+    // auto dist_to_next = std::distance(
+    //     block, block + next + 4); // Calculate the distance to the next block
     h_block_sizes.push_back(
         next); // Add the size of the block to the block sizes
-    cumulative_offset += dist_to_next; // Accumulate the offset
+    cumulative_offset += next + 4; // Accumulate the offset
     h_block_offsets_absolute.push_back(
         cumulative_offset); // Add the offset to the block offsets
     block += next + 4;      // Move to the next block
@@ -192,26 +198,119 @@ void block_offset_to_pointers(const uint8_t *d_compressed_data,
 /**
  * @brief Decompresses the data using bitshuffle and LZ4 on the GPU
  */
-void bshuf_decompress_lz4_gpu(const uint8_t *h_compressed_data, int size) {
+void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
+                              const size_t image_size) {
+  int image_size_bytes = image_size * sizeof(pixel_t);
+
+  // print the first 24 bytes of the compressed data
+  for (int i = 0; i < 24; i++) {
+    printf("%d ", h_compressed_data[i]);
+  }
+  printf("\n");
 
   // Allocate device memory for the compressed data
   uint8_t *d_compressed_data;
-  int compressed_data_size = size * sizeof(pixel_t);
-  cudaMalloc(&d_compressed_data, compressed_data_size);
-  cudaMemcpy(d_compressed_data, h_compressed_data + 12, compressed_data_size,
+  cudaMalloc(&d_compressed_data, image_size_bytes);
+  cudaMemcpy(d_compressed_data, h_compressed_data + 12, image_size_bytes,
              cudaMemcpyHostToDevice);
+
+  printf("d_buffer size: %zu\n", image_size_bytes);
 
   std::vector<int> block_offsets;
   std::vector<int> block_sizes;
-  get_block_size_and_offset((uint8_t *)h_compressed_data, block_offsets,
-                            block_sizes);
+  get_block_size_and_offset(h_compressed_data, block_offsets, block_sizes);
 
-  for (int i = 0; i < 10; i++) {
-    fmt::print("Block offset {}: {}", i, block_offsets[i]);
-    fmt::print("Block size {}: {}", i, block_sizes[i]);
+  // for (int i = 0; i < 10; i++) {
+  //   fmt::print("Block offset {}: {}", i, block_offsets[i]);
+  //   fmt::print("Block size {}: {}", i, block_sizes[i]);
+  // }
+
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+
+  // Set chunk size and batch size
+  size_t chunk_size = CHUNK_SIZE;
+  size_t batch_size =
+      ((image_size_bytes + chunk_size - 1) / chunk_size) + 1; // Remove +1?
+
+  // The pointers on the GPU, to the compressed chunks
+  void **d_compressed_ptrs; // Pointers to the compressed chunks
+  cudaMalloc(&d_compressed_ptrs,
+             sizeof(uint8_t *) *
+                 batch_size); // Allocate memory for the pointers
+  block_offset_to_pointers(
+      d_compressed_data, block_offsets,
+      d_compressed_ptrs); // Convert block offsets to pointers on the GPU
+
+  // Allocate device memory for the compressed bytes
+  size_t *d_compressed_bytes;
+  cudaMalloc(&d_compressed_bytes,
+             sizeof(size_t) *
+                 batch_size); // Allocate memory for the compressed bytes
+  d_compressed_bytes =
+      (size_t *)image_size_bytes; // Set the compressed bytes to the size of the
+                                  // compressed data
+
+  // Allocate device memory for the uncompressed bytes
+  size_t *d_uncompressed_bytes; // To be calculated
+  cudaMalloc(&d_uncompressed_bytes,
+             sizeof(size_t) *
+                 batch_size); // Allocate memory for the uncompressed bytes
+
+  printf("Getting decompressed size\n");
+  // Get the size of the decompressed data
+  nvcompBatchedLZ4GetDecompressSizeAsync(d_compressed_ptrs, d_compressed_bytes,
+                                         d_uncompressed_bytes, batch_size,
+                                         stream);
+  printf("Decompressed size: %zu\n", d_uncompressed_bytes);
+
+  printf("Preparing for decompression\n");
+
+  // Allocate the temporary buffer for the decompressed data
+  size_t decomp_temp_bytes;
+  nvcompBatchedLZ4DecompressGetTempSize(batch_size, chunk_size,
+                                        &decomp_temp_bytes);
+
+  // Allocate device memory for the temporary buffer
+  void *d_decomp_temp;
+  cudaMalloc(&d_decomp_temp, decomp_temp_bytes);
+
+  // Allocate statuses
+  nvcompStatus_t *device_statuses;
+  cudaMalloc(&device_statuses, sizeof(nvcompStatus_t) * batch_size);
+
+  // Also allocate an array to store the actual_uncompressed_bytes.
+  // Note that we could use nullptr for this. We already have the
+  // actual sizes computed during the call to
+  // nvcompBatchedLZ4GetDecompressSizeAsync.
+  size_t *d_actual_uncompressed_bytes;
+  cudaMalloc(&d_actual_uncompressed_bytes, sizeof(size_t) * batch_size);
+
+  void **d_uncompressed_ptrs;
+  cudaMalloc(&d_uncompressed_ptrs, sizeof(uint8_t *) * batch_size);
+
+  printf("Decompressing\n");
+
+  // Decompress the data
+  // This decompresses each input, device_compressed_ptrs[i], and places the
+  // decompressed result in the corresponding output list,
+  // d_uncompressed_ptrs[i]. It also writes the size of the uncompressed
+  // data to d_uncompressed_bytes[i].
+  nvcompStatus_t decomp_res = nvcompBatchedLZ4DecompressAsync(
+      d_compressed_ptrs, d_compressed_bytes, d_uncompressed_bytes,
+      d_actual_uncompressed_bytes, batch_size, d_decomp_temp, decomp_temp_bytes,
+      d_uncompressed_ptrs,
+      device_statuses, // make nullptr to improve throughput
+      stream);
+
+  if (decomp_res != nvcompSuccess) {
+    printf("Error in decompression\n");
+  } else {
+    printf("Decompression successful\n");
   }
 
-  // TODO: Complete this
+  // Wait for the decompression to finish
+  cudaStreamSynchronize(stream);
 }
 
 void decompress_lz4_gpu(const uint8_t *d_compressed_data,
@@ -301,6 +400,6 @@ void decompress_lz4_gpu(const uint8_t *d_compressed_data,
 
 void print_array(uint8_t *d_buffer, int length, int index) {
   print_array_kernel<<<1, 1>>>(d_buffer, length, index);
-  cuda_throw_error();
+  // cuda_throw_error();
   cudaDeviceSynchronize();
 }

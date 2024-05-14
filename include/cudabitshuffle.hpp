@@ -11,9 +11,13 @@
 #include <nvcomp/lz4.h>
 #include <stdio.h>
 
-void run_test();
-
 void print_array(uint8_t *d_buffer, int length, int index);
+
+void byteswap64(void *ptr);
+void byteswap32(void *ptr);
+
+void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
+                              const size_t image_size);
 
 void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
                         uint8_t *decompressed_data, size_t decompressed_size,
