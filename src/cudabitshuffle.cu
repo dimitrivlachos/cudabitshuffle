@@ -212,114 +212,106 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
                               const size_t image_size) {
   int image_size_bytes = image_size * sizeof(pixel_t);
 
-  // print the first 24 bytes of the compressed data
+  // Print the first 24 bytes of the compressed data
   for (int i = 0; i < 24; i++) {
     printf("%d ", h_compressed_data[i]);
   }
   printf("\n");
 
-  // Allocate device memory for the compressed data
+  // Allocate device memory for the compressed data and copy from host to device
   uint8_t *d_compressed_data;
   cudaMalloc(&d_compressed_data, image_size_bytes);
   cudaMemcpy(d_compressed_data, h_compressed_data + 12, image_size_bytes,
              cudaMemcpyHostToDevice);
-
   printf("d_buffer size: %zu\n", image_size_bytes);
 
+  // Calculate block offsets and sizes from compressed data
   std::vector<int> block_offsets;
   std::vector<int> block_sizes;
   get_block_size_and_offset(h_compressed_data, block_offsets, block_sizes);
 
-  // for (int i = 0; i < 10; i++) {
-  //   fmt::print("Block offset {}: {}", i, block_offsets[i]);
-  //   fmt::print("Block size {}: {}", i, block_sizes[i]);
-  // }
-
+  // Set up CUDA stream for asynchronous operations
   cudaStream_t stream;
   cudaStreamCreate(&stream);
 
-  // Set chunk size and batch size
+  // Determine the number of blocks (batch size)
   size_t chunk_size = CHUNK_SIZE;
-  size_t batch_size =
-      ((image_size_bytes + chunk_size - 1) / chunk_size) + 1; // Remove +1?
+  size_t batch_size = (image_size_bytes + chunk_size - 1) / chunk_size + 1;
 
-  // The pointers on the GPU, to the compressed chunks
-  void **d_compressed_ptrs; // Pointers to the compressed chunks
-  cudaMalloc(&d_compressed_ptrs,
-             sizeof(uint8_t *) *
-                 batch_size); // Allocate memory for the pointers
-  block_offset_to_pointers(
-      d_compressed_data, block_offsets,
-      d_compressed_ptrs); // Convert block offsets to pointers on the GPU
-
-  // Allocate device memory for the compressed bytes
+  // Allocate device memory for pointers to compressed and uncompressed data
+  void **d_compressed_ptrs;
   size_t *d_compressed_bytes;
+  size_t *d_uncompressed_bytes;
+  void **d_uncompressed_ptrs;
+  cudaMalloc(&d_compressed_ptrs, sizeof(uint8_t *) * batch_size);
   cudaMalloc(&d_compressed_bytes, block_sizes.size() * sizeof(size_t));
+  cudaMalloc(&d_uncompressed_bytes, block_sizes.size() * sizeof(size_t));
+  cudaMalloc(&d_uncompressed_ptrs, sizeof(void *) * batch_size);
 
   // Copy the sizes of the blocks to the device memory
   cudaMemcpy(d_compressed_bytes, block_sizes.data(),
              block_sizes.size() * sizeof(size_t), cudaMemcpyHostToDevice);
 
-  // Allocate device memory for the uncompressed bytes
-  size_t *d_uncompressed_bytes; // To be calculated
-  cudaMalloc(&d_uncompressed_bytes,
-             sizeof(size_t) *
-                 batch_size); // Allocate memory for the uncompressed bytes
+  // Convert block offsets to pointers on the GPU
+  block_offset_to_pointers(d_compressed_data, block_offsets, d_compressed_ptrs);
 
-  printf("Getting decompressed size\n");
-  // Get the size of the decompressed data
-  nvcompBatchedLZ4GetDecompressSizeAsync(d_compressed_ptrs, d_compressed_bytes,
-                                         d_uncompressed_bytes, batch_size,
-                                         stream);
-  printf("Decompressed size: %zu\n", d_uncompressed_bytes);
-
-  printf("Preparing for decompression\n");
-
-  // Allocate the temporary buffer for the decompressed data
+  // Decompression size and temporary buffer setup
   size_t decomp_temp_bytes;
   nvcompBatchedLZ4DecompressGetTempSize(batch_size, chunk_size,
                                         &decomp_temp_bytes);
-
-  // Allocate device memory for the temporary buffer
   void *d_decomp_temp;
   cudaMalloc(&d_decomp_temp, decomp_temp_bytes);
 
-  // Allocate statuses
+  // Setup for decompression error handling
   nvcompStatus_t *device_statuses;
-  cudaMalloc(&device_statuses, sizeof(nvcompStatus_t) * batch_size);
-
-  // Also allocate an array to store the actual_uncompressed_bytes.
-  // Note that we could use nullptr for this. We already have the
-  // actual sizes computed during the call to
-  // nvcompBatchedLZ4GetDecompressSizeAsync.
   size_t *d_actual_uncompressed_bytes;
+  cudaMalloc(&device_statuses, sizeof(nvcompStatus_t) * batch_size);
   cudaMalloc(&d_actual_uncompressed_bytes, sizeof(size_t) * batch_size);
 
-  void **d_uncompressed_ptrs;
-  cudaMalloc(&d_uncompressed_ptrs, sizeof(uint8_t *) * batch_size);
+  // Get the size of the decompressed data asynchronously
+  nvcompBatchedLZ4GetDecompressSizeAsync(d_compressed_ptrs, d_compressed_bytes,
+                                         d_uncompressed_bytes, batch_size,
+                                         stream);
+  printf("Getting decompressed size\n");
 
+  // Perform the decompression
   printf("Decompressing\n");
-
-  // Decompress the data
-  // This decompresses each input, device_compressed_ptrs[i], and places the
-  // decompressed result in the corresponding output list,
-  // d_uncompressed_ptrs[i]. It also writes the size of the uncompressed
-  // data to d_uncompressed_bytes[i].
   nvcompStatus_t decomp_res = nvcompBatchedLZ4DecompressAsync(
       d_compressed_ptrs, d_compressed_bytes, d_uncompressed_bytes,
       d_actual_uncompressed_bytes, batch_size, d_decomp_temp, decomp_temp_bytes,
-      d_uncompressed_ptrs,
-      device_statuses, // make nullptr to improve throughput
-      stream);
+      d_uncompressed_ptrs, device_statuses, stream);
 
+  // Check results of the decompression
   if (decomp_res != nvcompSuccess) {
     printf("Error in decompression\n");
   } else {
     printf("Decompression successful\n");
   }
 
-  // Wait for the decompression to finish
+  // Synchronize stream to ensure all operations are complete
   cudaStreamSynchronize(stream);
+
+  // Check decompression status for each block
+  nvcompStatus_t *host_statuses = new nvcompStatus_t[batch_size];
+  cudaMemcpy(host_statuses, device_statuses,
+             batch_size * sizeof(nvcompStatus_t), cudaMemcpyDeviceToHost);
+  for (int i = 0; i < batch_size; ++i) {
+    if (host_statuses[i] != nvcompSuccess) {
+      printf("Decompression error on block %d: %d\n", i, host_statuses[i]);
+    }
+  }
+
+  // Cleanup
+  delete[] host_statuses;
+  cudaFree(d_compressed_data);
+  cudaFree(d_compressed_ptrs);
+  cudaFree(d_compressed_bytes);
+  cudaFree(d_uncompressed_bytes);
+  cudaFree(d_uncompressed_ptrs);
+  cudaFree(d_decomp_temp);
+  cudaFree(device_statuses);
+  cudaFree(d_actual_uncompressed_bytes);
+  cudaStreamDestroy(stream);
 }
 
 void print_array(uint8_t *d_buffer, int length, int index) {
