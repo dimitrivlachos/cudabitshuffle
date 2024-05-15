@@ -1,10 +1,4 @@
 #include "cudabitshuffle.hpp"
-#include "common.hpp"
-#include "h5read.h"
-#include <bitshuffle.h>
-#include <cuda_runtime.h>
-#include <fmt/core.h>
-#include <iostream>
 
 // Define the pixel type
 using pixel_t = H5Read::image_type;
@@ -73,6 +67,14 @@ public:
   size_t pitch;
 };
 
+void print_bytes(void *buffer, int length) {
+  uint8_t *bytes = (uint8_t *)buffer;
+  for (int i = 0; i < length; i++) {
+    std::cout << (int)bytes[i] << " ";
+  }
+  std::cout << std::endl;
+}
+
 void cpu_decompress(H5Read *reader, std::shared_ptr<pixel_t[]> *out,
                     int chunk_index) {
   // Get the image width and height
@@ -118,22 +120,54 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
   int height = reader->image_shape()[0];
   int width = reader->image_shape()[1];
 
+  printf("Width: %d, Height: %d, pixel_t: %d\n", width, height,
+         sizeof(pixel_t));
+  printf("Size: %d\n", width * height * sizeof(pixel_t));
+
   auto raw_chunk_buffer =
       std::vector<uint8_t>(width * height * sizeof(pixel_t));
 
   SPAN<uint8_t> buffer;
   buffer = reader->get_raw_chunk(chunk_index, raw_chunk_buffer);
 
-  uint8_t *d_buffer;
-  cudaMalloc(&d_buffer, width * height * sizeof(pixel_t));
-  int length = width * height * sizeof(pixel_t);
+  // Make a copy of buffer for testing
+  std::vector<uint8_t> vbuffer_copy(buffer.begin(), buffer.end());
+  SPAN<uint8_t> buffer_copy(vbuffer_copy);
 
-  // Copy the compressed chunk data to the device
-  cudaMemcpy(d_buffer, buffer.data() + 12, buffer.size_bytes(),
-             cudaMemcpyHostToDevice);
+  printf("Buffer bytes\n");
+  // Print the first 12 bytes of buffer.data()
+  for (int i = 0; i < 24; i++) {
+    std::cout << (int)buffer[i] << " ";
+  }
+  printf("\n");
+  // Print the first 12 bytes of buffer_copy.data()
+  for (int i = 0; i < 24; i++) {
+    std::cout << (int)buffer_copy[i] << " ";
+  }
+  printf("\n\nMain byteswap\n");
 
-  print_array(d_buffer, length, 0);
-  nvc_decompress(d_buffer);
+  // byte swap the header
+  byteswap64(buffer_copy.data());
+  byteswap32(buffer_copy.data() + 8);
+
+  // now byte swap the block headers
+  uint8_t *block = buffer_copy.data() + 12;
+  uint32_t image_size = (uint32_t) * (uint64_t *)buffer_copy.data();
+  uint32_t n_block = image_size / 8192;
+  if (image_size % 8192)
+    n_block++;
+  for (int i = 0; i < n_block; i++) {
+    if (i < 10) {
+      printf("Block: %p\n", block);
+      print_bytes(block, 20);
+    }
+    byteswap32(block);
+    uint32_t next = *(uint32_t *)block;
+    block += next + 4;
+  }
+  printf("\n\n GPU byteswap\n");
+
+  bshuf_decompress_lz4_gpu(buffer.data(), width * height);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
@@ -146,19 +180,16 @@ int main() {
   int height = reader.image_shape()[0];
   int width = reader.image_shape()[1];
 
-  auto host_decompressed_image =
-      make_cuda_pinned_malloc<pixel_t>(width * height);
-
   auto device_decompressed_image =
       make_cuda_pitched_malloc<pixel_t>(width, height);
 
-  fmt::print("CPU Decompression\n");
+  // fmt::print("CPU Decompression\n");
 
-  cpu_decompress(&reader, &host_decompressed_image, 49);
+  // cpu_decompress(&reader, &host_decompressed_image, 49);
 
-  // image data x, y, width and height, image width and height
-  draw_image_data(host_decompressed_image.get(), 1640, 1690, 35, 40, width,
-                  height);
+  // // image data x, y, width and height, image width and height
+  // draw_image_data(host_decompressed_image.get(), 1640, 1690, 35, 40, width,
+  //                 height);
 
   fmt::print("GPU Decompression\n");
 

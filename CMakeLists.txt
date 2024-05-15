@@ -22,6 +22,9 @@ include_directories(common/include)
 add_subdirectory(h5read)
 add_subdirectory(dependencies/fmt)
 
+# Set path to nvcomp
+set(nvcomp_DIR "${CMAKE_SOURCE_DIR}/ENV/lib/cmake/nvcomp")
+
 # Find the required packages
 find_package(nvcomp REQUIRED)
 find_package(CUDAToolkit REQUIRED)
