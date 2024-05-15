@@ -3,34 +3,6 @@
 // Define the pixel type
 using pixel_t = H5Read::image_type;
 
-// void byteswap64(void *ptr) {
-//   uint8_t *bytes = (uint8_t *)ptr;
-//   uint8_t tmp;
-//   tmp = bytes[0];
-//   bytes[0] = bytes[7];
-//   bytes[7] = tmp;
-//   tmp = bytes[1];
-//   bytes[1] = bytes[6];
-//   bytes[6] = tmp;
-//   tmp = bytes[2];
-//   bytes[2] = bytes[5];
-//   bytes[5] = tmp;
-//   tmp = bytes[3];
-//   bytes[3] = bytes[4];
-//   bytes[4] = tmp;
-// }
-
-// void byteswap32(void *ptr) {
-//   uint8_t *bytes = (uint8_t *)ptr;
-//   uint8_t tmp;
-//   tmp = bytes[0];
-//   bytes[0] = bytes[3];
-//   bytes[3] = tmp;
-//   tmp = bytes[1];
-//   bytes[1] = bytes[2];
-//   bytes[2] = tmp;
-// }
-
 class cuda_error : public std::runtime_error {
 public:
   using std::runtime_error::runtime_error;
@@ -103,80 +75,6 @@ void print_bytes(void *buffer, int length) {
   std::cout << std::endl;
 }
 
-/**
- * @brief: Swap the bytes of a 64-bit integer in place
- * @param: ptr - pointer to the 64-bit integer
- */
-// void byteswap64(const void *ptr) {
-//   uint8_t *bytes = (uint8_t *)ptr;
-//   uint8_t tmp;
-//   tmp = bytes[0];
-//   bytes[0] = bytes[7];
-//   bytes[7] = tmp;
-//   tmp = bytes[1];
-//   bytes[1] = bytes[6];
-//   bytes[6] = tmp;
-//   tmp = bytes[2];
-//   bytes[2] = bytes[5];
-//   bytes[5] = tmp;
-//   tmp = bytes[3];
-//   bytes[3] = bytes[4];
-//   bytes[4] = tmp;
-// }
-
-/**
- * @brief: Swap the bytes of a 32-bit integer in place
- * @param: ptr - pointer to the 32-bit intege
- */
-// void byteswap32(void *ptr) {
-//   uint8_t *bytes = (uint8_t *)ptr;
-//   uint8_t tmp;
-//   tmp = bytes[0];
-//   bytes[0] = bytes[3];
-//   bytes[3] = tmp;
-//   tmp = bytes[1];
-//   bytes[1] = bytes[2];
-//   bytes[2] = tmp;
-// }
-
-/**
- * @brief: Get the absolute block offsets from the compressed chunk data
- * we get absolute block offsets because this allows the device to
- * calculate the block offsets in device memory in parallel
- * @param: buffer - pointer to the compressed chunk data
- * @return: vector of absolute block offsets
- */
-// std::vector<int> get_absolute_block_offsets(uint8_t *buffer) {
-//   std::vector<int> block_offsets;
-
-//   // Byteswap the header
-//   byteswap64(buffer);
-//   byteswap32(buffer + 8);
-
-//   // Now byte swap the block headers
-//   uint8_t *block = buffer + 12; // Skip the header
-//   uint32_t image_size = (uint32_t) * (uint64_t *)buffer;
-//   uint32_t n_block = image_size / 8192;
-//   if (image_size % 8192)
-//     n_block++;
-//   int cumulative_offset = 0;                  // First block starts at 0
-//   block_offsets.push_back(cumulative_offset); // First block starts at 0
-//   printf("Block offsets size: %d\n", block_offsets.size());
-//   for (int i = 0; i < n_block; i++) {
-//     byteswap32(block);
-//     uint32_t next = *(uint32_t *)block;
-//     auto dist_to_next = std::distance(block, block + next + 4);
-//     cumulative_offset += dist_to_next;
-//     if (cumulative_offset > 1000000000)
-//       printf("Cumulative offset: %d\n", cumulative_offset);
-//     if (i > 4410)
-//       fmt::print("gabo Block offset {}: {}\n", i, cumulative_offset);
-//     block_offsets.push_back(cumulative_offset);
-//     block += next + 4;
-//   }
-//   return block_offsets;
-// }
-
 void cpu_decompress(H5Read *reader, std::shared_ptr<pixel_t[]> *out,
                     int chunk_index) {
   // Get the image width and height
@@ -232,20 +130,6 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
   SPAN<uint8_t> buffer;
   buffer = reader->get_raw_chunk(chunk_index, raw_chunk_buffer);
 
-  // uint8_t *d_buffer;
-  // int length = width * height * sizeof(pixel_t);
-  // cudaMalloc(&d_buffer, length);
-
-  // Print the size of buffer
-  // std::cout << "Buffer size: " << buffer.size_bytes() << " bytes" <<
-  // std::endl;
-
-  // // Print the first 12 bytes of buffer.data()
-  // for (int i = 0; i < 12; i++) {
-  //   std::cout << (int)buffer[i] << " ";
-  // }
-  // std::cout << std::endl;
-
   // Make a copy of buffer for testing
   std::vector<uint8_t> vbuffer_copy(buffer.begin(), buffer.end());
   SPAN<uint8_t> buffer_copy(vbuffer_copy);
@@ -282,26 +166,6 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
     block += next + 4;
   }
   printf("\n\n GPU byteswap\n");
-  // Copy the compressed chunk data to the device
-  // cudaMemcpy(d_buffer, buffer.data() + 12, buffer.size_bytes(),
-  //            cudaMemcpyHostToDevice);
-
-  // print_array(d_buffer, length, 0);
-
-  // // Create output buffer
-  // uint8_t *d_out;
-  // cudaMalloc(&d_out, width * height * sizeof(pixel_t));
-
-  // // Get the block offsets
-  // printf("\n\nMy byteswap\n");
-  // auto absolute_block_offsets = get_absolute_block_offsets(buffer.data());
-  // for (int i = 0; i < 10; i++) {
-  //   fmt::print("Block offset: {}\n", absolute_block_offsets[i]);
-  // }
-
-  // decompress_lz4_gpu(d_buffer, length, d_out, width * height *
-  // sizeof(pixel_t),
-  //                    absolute_block_offsets);
 
   bshuf_decompress_lz4_gpu(buffer.data(), width * height);
 
@@ -315,9 +179,6 @@ int main() {
 
   int height = reader.image_shape()[0];
   int width = reader.image_shape()[1];
-
-  // auto host_decompressed_image =
-  //     make_cuda_pinned_malloc<pixel_t>(width * height);
 
   auto device_decompressed_image =
       make_cuda_pitched_malloc<pixel_t>(width, height);
