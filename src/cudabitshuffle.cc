@@ -1,5 +1,8 @@
 #include "cudabitshuffle.hpp"
 
+// Define the pixel type
+using pixel_t = H5Read::image_type;
+
 // void byteswap64(void *ptr) {
 //   uint8_t *bytes = (uint8_t *)ptr;
 //   uint8_t tmp;

@@ -18,6 +18,3 @@ void byteswap32(void *ptr);
 
 void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
                               const size_t image_size);
-
-// Define the pixel type
-using pixel_t = H5Read::image_type;

@@ -6,6 +6,9 @@
 
 #define CHUNK_SIZE 8192
 
+// Define the pixel type
+using pixel_t = H5Read::image_type;
+
 inline auto cuda_error_string(cudaError_t err) {
   const char *err_name = cudaGetErrorName(err);
   const char *err_str = cudaGetErrorString(err);
