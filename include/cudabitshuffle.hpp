@@ -19,9 +19,5 @@ void byteswap32(void *ptr);
 void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
                               const size_t image_size);
 
-void decompress_lz4_gpu(const uint8_t *compressed_data, size_t compressed_size,
-                        uint8_t *decompressed_data, size_t decompressed_size,
-                        const std::vector<int> &absolute_block_offsets);
-
 // Define the pixel type
 using pixel_t = H5Read::image_type;
