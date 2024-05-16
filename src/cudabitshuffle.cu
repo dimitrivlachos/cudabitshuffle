@@ -271,11 +271,13 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   cudaMalloc(&device_statuses, sizeof(nvcompStatus_t) * batch_size);
   cudaMalloc(&d_actual_uncompressed_bytes, sizeof(size_t) * batch_size);
 
+  printf("Getting decompressed size\n");
   // Get the size of the decompressed data asynchronously
   nvcompBatchedLZ4GetDecompressSizeAsync(d_compressed_ptrs, d_compressed_bytes,
                                          d_uncompressed_bytes, batch_size,
                                          stream);
-  printf("Getting decompressed size\n");
+
+  printf("Decompress size: %zu\n", d_uncompressed_bytes);
 
   // Perform the decompression
   printf("Decompressing\n");
