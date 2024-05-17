@@ -115,7 +115,7 @@ void cpu_decompress(H5Read *reader, std::shared_ptr<pixel_t[]> *out,
   std::cout << std::endl;
 }
 
-void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
+void gpu_decompress(H5Read *reader, uint8_t *out, int chunk_index) {
   // Get the image width and height
   int height = reader->image_shape()[0];
   int width = reader->image_shape()[1];
@@ -167,7 +167,7 @@ void gpu_decompress(H5Read *reader, auto *out, int chunk_index) {
   }
   printf("\n\n GPU byteswap\n");
 
-  bshuf_decompress_lz4_gpu(buffer.data(), width * height);
+  bshuf_decompress_lz4_gpu(buffer.data(), width * height, out);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
@@ -180,8 +180,8 @@ int main() {
   int height = reader.image_shape()[0];
   int width = reader.image_shape()[1];
 
-  auto device_decompressed_image =
-      make_cuda_pitched_malloc<pixel_t>(width, height);
+  // auto device_decompressed_image =
+  //     make_cuda_pitched_malloc<pixel_t>(width, height);
 
   // fmt::print("CPU Decompression\n");
 
@@ -193,7 +193,37 @@ int main() {
 
   fmt::print("GPU Decompression\n");
 
-  gpu_decompress(&reader, &device_decompressed_image, 49);
+  uint8_t *decompressed_image = new uint8_t[width * height * sizeof(pixel_t)];
+  gpu_decompress(&reader, decompressed_image, 49);
+  // draw_image_data(decompressed_image, width-35, height-40, 35, 40, width,
+  // height);
+
+  // Check if there are non-zero elements in the decompressed image
+  int j = 0;
+  while (decompressed_image[j] == 0) {
+    if (j > width * height * sizeof(pixel_t)) {
+      std::cout << "No non-zero elements found" << std::endl;
+      return 0;
+    }
+    j++;
+  }
+  std::cout << "J: " << j << std::endl;
+
+  // Print 50 elements around the first non-zero element of the decompressed
+  // data
+  for (int i = 0; i < 50; i++) {
+    std::cout << (int)decompressed_image[j - 25 + i] << " ";
+  }
+  std::cout << std::endl;
+
+  // Assuming bytes, so uint8_t, calculate j's position in the image
+  int x = j % width;
+  int y = j / width;
+
+  std::cout << "X: " << x << ", Y: " << y << std::endl;
+
+  // print the size of the image
+  std::cout << "Image size: " << width << " x " << height << std::endl;
 
   return 0;
 }
