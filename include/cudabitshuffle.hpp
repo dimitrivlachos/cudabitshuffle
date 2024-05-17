@@ -11,7 +11,8 @@
 #include <nvcomp/lz4.h>
 #include <stdio.h>
 
-void print_array(uint8_t *d_buffer, int length, int index);
+template <typename T>
+void print_array(const T *d_buffer, int length, int index, const char *message);
 
 void byteswap64(void *ptr);
 void byteswap32(void *ptr);

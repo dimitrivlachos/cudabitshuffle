@@ -76,18 +76,40 @@ void byteswap32(void *ptr) {
   bytes[2] = tmp;
 }
 
-/**
- * @brief Kernel to print an array on the GPU
- * @param d_buffer The buffer to print
- * @param length The length of the buffer to print
- * @param index The index to start printing from
- */
-__global__ void print_array_kernel(uint8_t *d_buffer, int length, int index) {
-  int limit = min(index + 50, length);
-  for (int i = index; i < limit; i++) {
-    printf("%d ", d_buffer[i]);
+template <typename T>
+__global__ void printArrayKernel(T *d_array, size_t size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    printf("%d: %f\n", idx, static_cast<float>(d_array[idx]));
   }
-  printf("\n");
+}
+
+template <> __global__ void printArrayKernel<int>(int *d_array, size_t size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    printf("%d: %d\n", idx, d_array[idx]);
+  }
+}
+
+template <>
+__global__ void printArrayKernel<double>(double *d_array, size_t size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    printf("%d: %lf\n", idx, d_array[idx]);
+  }
+}
+
+template <typename T> void printArray(T *d_array, size_t size) {
+  // Define block size and grid size
+  int blockSize = 256;
+  int gridSize = (size + blockSize - 1) / blockSize;
+
+  // Launch kernel to print the array
+  printArrayKernel<<<gridSize, blockSize>>>(d_array, size);
+
+  // Synchronize device to ensure all prints are done
+  cuda_throw_error();
+  cudaDeviceSynchronize();
 }
 
 /**
@@ -101,7 +123,7 @@ __global__ void print_array_kernel(uint8_t *d_buffer, int length, int index) {
 void get_block_size_and_offset(uint8_t *h_buffer,
                                std::vector<int> &h_block_offsets_absolute,
                                std::vector<int> &h_block_sizes) {
-
+  // TODO: Change push_back to assigned size as we know the size
   // Byteswap the header
   byteswap64(h_buffer);
   byteswap32(h_buffer + 8);
@@ -170,7 +192,12 @@ block_offset_to_pointers_kernel(const uint8_t *d_compressed_data,
     current_ptr += d_block_offsets[i];
 
     if (i < 10 || i > 4400) {
-      printf("Current pointer %d: %p\n", i, current_ptr);
+      printf("Current pointer %d: %p   ", i, current_ptr);
+      // // print first 24 bytes of the block
+      // for (int i = 0; i < 24; i++) {
+      //   printf("%d ", current_ptr[i]);
+      // }
+      // printf("\n");
     }
 
     // Set the pointer to the compressed block
@@ -251,9 +278,26 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   cudaMalloc(&d_uncompressed_bytes, block_sizes.size() * sizeof(size_t));
   cudaMalloc(&d_uncompressed_ptrs, sizeof(void *) * batch_size);
 
+  // Print the first 10 block sizes
+  for (int i = 0; i < 10; i++) {
+    printf("Block size %d: %d\n", i, block_sizes[i]);
+  }
+
+  // std::vector<size_t> h_compressed_bytes(block_sizes.begin(),
+  //                                          block_sizes.end());
+
+  size_t *h_compressed_bytes = new size_t[block_sizes.size()];
+  for (int i = 0; i < block_sizes.size(); i++) {
+    h_compressed_bytes[i] = block_sizes[i];
+    if (i < 10)
+      printf("2 Block size %d: %d\n", i, h_compressed_bytes[i]);
+  }
+
   // Copy the sizes of the blocks to the device memory
-  cudaMemcpy(d_compressed_bytes, block_sizes.data(),
+  cudaMemcpy(d_compressed_bytes, h_compressed_bytes,
              block_sizes.size() * sizeof(size_t), cudaMemcpyHostToDevice);
+
+  printArray(d_compressed_bytes, 10);
 
   // Convert block offsets to pointers on the GPU
   block_offset_to_pointers(d_compressed_data, block_offsets, d_compressed_ptrs);
@@ -277,7 +321,15 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
                                          d_uncompressed_bytes, batch_size,
                                          stream);
 
-  printf("Decompress size: %zu\n", d_uncompressed_bytes);
+  cudaStreamSynchronize(stream);
+
+  // Copy back and check calculated sizes
+  size_t *h_uncompressed_bytes = new size_t[batch_size];
+  cudaMemcpy(h_uncompressed_bytes, d_uncompressed_bytes,
+             batch_size * sizeof(size_t), cudaMemcpyDeviceToHost);
+  for (int i = 0; i < 5; i++) {
+    printf("Uncompressed size %d: %zu\n", i, h_uncompressed_bytes[i]);
+  }
 
   // Perform the decompression
   printf("Decompressing\n");
@@ -297,17 +349,17 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   cudaStreamSynchronize(stream);
 
   // Check decompression status for each block
-  nvcompStatus_t *host_statuses = new nvcompStatus_t[batch_size];
-  cudaMemcpy(host_statuses, device_statuses,
-             batch_size * sizeof(nvcompStatus_t), cudaMemcpyDeviceToHost);
-  for (int i = 0; i < batch_size; ++i) {
-    if (host_statuses[i] != nvcompSuccess) {
-      printf("Decompression error on block %d: %d\n", i, host_statuses[i]);
-    }
-  }
+  // nvcompStatus_t *host_statuses = new nvcompStatus_t[batch_size];
+  // cudaMemcpy(host_statuses, device_statuses,
+  //            batch_size * sizeof(nvcompStatus_t), cudaMemcpyDeviceToHost);
+  // for (int i = 0; i < batch_size; ++i) {
+  //   if (host_statuses[i] != nvcompSuccess) {
+  //     printf("Decompression error on block %d: %d\n", i, host_statuses[i]);
+  //   }
+  // }
 
   // Cleanup
-  delete[] host_statuses;
+  // delete[] host_statuses;
   cudaFree(d_compressed_data);
   cudaFree(d_compressed_ptrs);
   cudaFree(d_compressed_bytes);
@@ -317,10 +369,4 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   cudaFree(device_statuses);
   cudaFree(d_actual_uncompressed_bytes);
   cudaStreamDestroy(stream);
-}
-
-void print_array(uint8_t *d_buffer, int length, int index) {
-  print_array_kernel<<<1, 1>>>(d_buffer, length, index);
-  // cuda_throw_error();
-  cudaDeviceSynchronize();
 }
