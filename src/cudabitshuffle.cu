@@ -141,7 +141,7 @@ void get_block_size_and_offset(uint8_t *h_buffer,
   if (image_size % CHUNK_SIZE) { // If there is a remainder, add one more block
     n_block++;
   }
-  int cumulative_offset = 0; // The cumulative offset of the blocks
+  int cumulative_offset = 4; // The cumulative offset of the blocks
   h_block_offsets_absolute.push_back(
       cumulative_offset); // The first block starts at 0
   printf("Block offsets size: %d\n", h_block_offsets_absolute.size());
@@ -306,6 +306,7 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   size_t decomp_temp_bytes;
   nvcompBatchedLZ4DecompressGetTempSize(batch_size, chunk_size,
                                         &decomp_temp_bytes);
+  printf("Decompression temp size: %zu\n", decomp_temp_bytes);
   void *d_decomp_temp;
   cudaMalloc(&d_decomp_temp, decomp_temp_bytes);
 
@@ -324,12 +325,14 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   cudaStreamSynchronize(stream);
 
   // Copy back and check calculated sizes
-  size_t *h_uncompressed_bytes = new size_t[batch_size];
-  cudaMemcpy(h_uncompressed_bytes, d_uncompressed_bytes,
-             batch_size * sizeof(size_t), cudaMemcpyDeviceToHost);
-  for (int i = 0; i < 5; i++) {
-    printf("Uncompressed size %d: %zu\n", i, h_uncompressed_bytes[i]);
-  }
+  // size_t *h_uncompressed_bytes = new size_t[batch_size];
+  // cudaMemcpy(h_uncompressed_bytes, d_uncompressed_bytes,
+  //            batch_size * sizeof(size_t), cudaMemcpyDeviceToHost);
+  // for (int i = 0; i < 5; i++) {
+  //   printf("Uncompressed size %d: %zu\n", i, h_uncompressed_bytes[i]);
+  // }
+  printf("Uncompressed sizes\n");
+  printArray(d_uncompressed_bytes, 10);
 
   // Perform the decompression
   printf("Decompressing\n");
