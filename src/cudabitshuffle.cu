@@ -235,23 +235,6 @@ void block_offset_to_pointers(const uint8_t *d_compressed_data,
   cudaFree(d_block_offsets);
 }
 
-// Kernel to copy decompressed blocks into a contiguous buffer
-__global__ void copy_decompressed_blocks(void **d_uncompressed_ptrs,
-                                         size_t *d_uncompressed_bytes,
-                                         uint8_t *d_decompressed_buffer,
-                                         int num_blocks) {
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-
-  if (i < num_blocks) {
-    const uint8_t *src_ptr = (const uint8_t *)d_uncompressed_ptrs[i];
-    uint8_t *dst_ptr = d_decompressed_buffer + d_uncompressed_bytes[i];
-
-    for (size_t j = 0; j < d_uncompressed_bytes[i]; ++j) {
-      dst_ptr[j] = src_ptr[j];
-    }
-  }
-}
-
 /**
  * @brief Decompresses the data using bitshuffle and LZ4 on the GPU
  */
@@ -295,7 +278,6 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   cudaMalloc(&d_compressed_ptrs, sizeof(uint8_t *) * batch_size);
   cudaMalloc(&d_compressed_bytes, block_sizes.size() * sizeof(size_t));
   cudaMalloc(&d_uncompressed_bytes, block_sizes.size() * sizeof(size_t));
-  // cudaMalloc(&d_uncompressed_ptrs, sizeof(void *) * batch_size);
   cudaMalloc(&d_uncompressed_ptrs, sizeof(size_t) * batch_size);
 
   // Print the first 10 block sizes
@@ -329,9 +311,7 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
 
   // Setup for decompression error handling
   nvcompStatus_t *device_statuses;
-  size_t *d_actual_uncompressed_bytes;
   cudaMalloc(&device_statuses, sizeof(nvcompStatus_t) * batch_size);
-  cudaMalloc(&d_actual_uncompressed_bytes, sizeof(size_t) * batch_size);
 
   printf("Getting decompressed size\n");
   // Get the size of the decompressed data asynchronously
@@ -356,9 +336,9 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   // Perform the decompression
   printf("Decompressing\n");
   nvcompStatus_t decomp_res = nvcompBatchedLZ4DecompressAsync(
-      d_compressed_ptrs, d_compressed_bytes, d_uncompressed_bytes,
-      d_actual_uncompressed_bytes, batch_size, d_decomp_temp, decomp_temp_bytes,
-      d_uncompressed_ptrs, device_statuses, stream);
+      d_compressed_ptrs, d_compressed_bytes, d_uncompressed_bytes, nullptr,
+      batch_size, d_decomp_temp, decomp_temp_bytes, d_uncompressed_ptrs,
+      device_statuses, stream);
 
   // Check results of the decompression
   if (decomp_res != nvcompSuccess) {
