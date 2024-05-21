@@ -379,6 +379,5 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   cudaFree(d_uncompressed_ptrs);
   cudaFree(d_decomp_temp);
   cudaFree(device_statuses);
-  cudaFree(d_actual_uncompressed_bytes);
   cudaStreamDestroy(stream);
 }
