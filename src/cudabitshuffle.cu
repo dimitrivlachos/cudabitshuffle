@@ -360,23 +360,9 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
     }
   }
 
-  // Allocate memory for the final decompressed data on the device
-  uint8_t *d_decompressed_buffer;
-  cudaMalloc(&d_decompressed_buffer, image_size_bytes);
-
-  // Copy decompressed blocks to the contiguous buffer
-  dim3 blocks((batch_size + 255) / 256);
-  dim3 threads(256);
-  copy_decompressed_blocks<<<blocks, threads>>>(
-      d_uncompressed_ptrs, d_uncompressed_bytes, d_decompressed_buffer,
-      batch_size);
-
   cudaStreamSynchronize(stream);
 
-  // Allocate host memory and copy the decompressed data back to the host
-  // uint8_t *h_decompressed_data = new uint8_t[image_size_bytes];
-  cudaMemcpy(out, d_decompressed_buffer, image_size_bytes,
-             cudaMemcpyDeviceToHost);
+  // TODO: Figure out if there is actually decompressed data
 
   // Print the first 24 bytes of the decompressed data
   for (int i = 0; i < 24; i++) {
