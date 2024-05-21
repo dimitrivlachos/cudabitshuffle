@@ -364,12 +364,6 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
 
   // TODO: Figure out if there is actually decompressed data
 
-  // Print the first 24 bytes of the decompressed data
-  for (int i = 0; i < 24; i++) {
-    printf("%d ", out[i]);
-  }
-  printf("\n");
-
   // Cleanup
   // delete[] host_statuses;
   cudaFree(d_compressed_data);
