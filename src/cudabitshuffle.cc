@@ -193,7 +193,11 @@ int main() {
 
   fmt::print("GPU Decompression\n");
 
-  uint8_t *decompressed_image = new uint8_t[width * height * sizeof(pixel_t)];
+  // uint8_t *decompressed_image = new uint8_t[width * height *
+  // sizeof(pixel_t)];
+  uint8_t *decompressed_image;
+  cudaMallocManaged(&decompressed_image, width * height * sizeof(pixel_t));
+
   gpu_decompress(&reader, decompressed_image, 49);
   // draw_image_data(decompressed_image, width-35, height-40, 35, 40, width,
   // height);
