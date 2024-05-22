@@ -270,15 +270,17 @@ __global__ void coalesce_data_kernel(uint8_t *out, void **d_uncompressed_ptrs,
 }
 
 void coalesce_data(uint8_t *out, void **d_uncompressed_ptrs,
-                   size_t *d_uncompressed_bytes, size_t num_chunks,
+                   size_t *d_uncompressed_bytes, size_t batch_size,
                    size_t total_size) {
   // Define the block size and grid size for the kernel launch
   const int blockSize = 256;
-  const int gridSize = (total_size + blockSize - 1) / blockSize;
+  const int gridSize = (batch_size + blockSize - 1) / blockSize;
 
+  printf("Launching coalesce_data_kernel with %d blocks and %d threads\n",
+         gridSize, blockSize);
   // Launch the kernel
   coalesce_data_kernel<<<gridSize, blockSize>>>(
-      out, d_uncompressed_ptrs, d_uncompressed_bytes, num_chunks);
+      out, d_uncompressed_ptrs, d_uncompressed_bytes, batch_size);
 
   // Check for any errors launching the kernel
   cudaError_t err = cudaGetLastError();
@@ -434,6 +436,7 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   uint8_t *d_output_buffer;
   cudaMalloc(&d_output_buffer, image_size_bytes);
 
+  printf("Coalescing data\n");
   // Copy the decompressed data to the output buffer
   coalesce_data(d_output_buffer, d_uncompressed_ptrs, d_uncompressed_bytes,
                 batch_size, image_size_bytes);
