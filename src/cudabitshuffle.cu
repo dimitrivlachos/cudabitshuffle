@@ -235,54 +235,78 @@ void block_offset_to_pointers(const uint8_t *d_compressed_data,
   cudaFree(d_block_offsets);
 }
 
-__global__ void coalesce_data_kernel(uint8_t *out, void **d_uncompressed_ptrs,
-                                     size_t *d_uncompressed_bytes,
-                                     size_t num_chunks) {
+__global__ void prefix_sum_kernel(size_t *d_uncompressed_bytes,
+                                  size_t *d_prefix_sum_bytes,
+                                  size_t *num_chunks) {
   // Calculate the global thread ID
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (idx >= num_chunks) {
+  if (idx >= *num_chunks) {
     return;
   }
 
-  // Iterate over each chunk
-  for (size_t chunk_idx = 0; chunk_idx < num_chunks; ++chunk_idx) {
-    // Get the pointer to the current chunk and its size
-    uint8_t *chunk_ptr = (uint8_t *)d_uncompressed_ptrs[chunk_idx];
-    size_t chunk_size = d_uncompressed_bytes[chunk_idx];
+  // Initialize the prefix sum
+  size_t prefix_sum = 0;
 
-    // Check if the current thread is within the bounds of this chunk
-    if (idx < chunk_size) {
-      // Calculate the destination index in the output buffer
-      size_t dest_idx = 0;
-      for (size_t i = 0; i < chunk_idx; ++i) {
-        dest_idx += d_uncompressed_bytes[i];
-      }
-      dest_idx += idx;
+  // Iterate over the uncompressed sizes
+  for (size_t i = 0; i < idx; ++i) {
+    // Add the current size to the prefix sum
+    prefix_sum += d_uncompressed_bytes[i];
+  }
 
-      // Copy the data from the chunk to the output buffer
-      out[dest_idx] = chunk_ptr[idx];
-    }
+  // Set the prefix sum for the current chunk
+  d_prefix_sum_bytes[idx] = prefix_sum;
+}
 
-    // Update the global thread ID for the next iteration
-    idx += blockDim.x * gridDim.x;
+__global__ void coalesce_data_kernel(uint8_t *out, void **d_uncompressed_ptrs,
+                                     size_t *d_uncompressed_bytes,
+                                     size_t *d_prefix_sum_bytes,
+                                     size_t *num_chunks) {
+  // Calculate the global thread ID
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx >= *num_chunks) {
+    return;
+  }
+
+  // Get the pointer to the current chunk and its size
+  uint8_t *chunk_ptr = (uint8_t *)d_uncompressed_ptrs[idx];
+  size_t chunk_size = d_uncompressed_bytes[idx];
+
+  // Calculate the destination index in the output buffer
+  size_t dest_idx = d_prefix_sum_bytes[idx];
+
+  // Iterate over each element in the chunk
+  for (size_t i = 0; i < chunk_size; ++i) {
+    // Copy the data from the chunk to the output buffer
+    out[dest_idx + i] = chunk_ptr[i];
   }
 }
 
 void coalesce_data(uint8_t *out, void **d_uncompressed_ptrs,
                    size_t *d_uncompressed_bytes, size_t batch_size,
                    size_t total_size) {
+  size_t *d_batch_size;
+  cudaMalloc(&d_batch_size, sizeof(size_t));
+  cudaMemcpy(d_batch_size, &batch_size, sizeof(size_t), cudaMemcpyHostToDevice);
+
   // Define the block size and grid size for the kernel launch
-  // const int blockSize = 256;
-  // const int gridSize = (batch_size + blockSize - 1) / blockSize;
   dim3 blockSize(256);
   dim3 gridSize((batch_size + blockSize.x - 1) / blockSize.x);
+
+  size_t *d_prefix_sum_bytes;
+  cudaMalloc(&d_prefix_sum_bytes, batch_size * sizeof(size_t));
+  prefix_sum_kernel<<<gridSize, blockSize>>>(d_uncompressed_bytes,
+                                             d_prefix_sum_bytes, d_batch_size);
+
+  print_array(d_prefix_sum_bytes, 10);
 
   printf("Launching coalesce_data_kernel with %d blocks and %d threads\n",
          gridSize.x, blockSize.x);
   // Launch the kernel
   coalesce_data_kernel<<<gridSize, blockSize>>>(
-      out, d_uncompressed_ptrs, d_uncompressed_bytes, batch_size);
+      out, d_uncompressed_ptrs, d_uncompressed_bytes, d_prefix_sum_bytes,
+      d_batch_size);
 
   // Check for any errors launching the kernel
   cudaError_t err = cudaGetLastError();
@@ -299,6 +323,9 @@ void coalesce_data(uint8_t *out, void **d_uncompressed_ptrs,
               << cudaGetErrorString(err) << ")!\n";
     exit(EXIT_FAILURE);
   }
+
+  // Free device memory
+  cudaFree(d_batch_size);
 }
 
 /**
