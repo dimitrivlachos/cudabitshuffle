@@ -273,11 +273,13 @@ void coalesce_data(uint8_t *out, void **d_uncompressed_ptrs,
                    size_t *d_uncompressed_bytes, size_t batch_size,
                    size_t total_size) {
   // Define the block size and grid size for the kernel launch
-  const int blockSize = 256;
-  const int gridSize = (batch_size + blockSize - 1) / blockSize;
+  // const int blockSize = 256;
+  // const int gridSize = (batch_size + blockSize - 1) / blockSize;
+  dim3 blockSize(256);
+  dim3 gridSize((batch_size + blockSize.x - 1) / blockSize.x);
 
   printf("Launching coalesce_data_kernel with %d blocks and %d threads\n",
-         gridSize, blockSize);
+         gridSize.x, blockSize.x);
   // Launch the kernel
   coalesce_data_kernel<<<gridSize, blockSize>>>(
       out, d_uncompressed_ptrs, d_uncompressed_bytes, batch_size);
