@@ -235,6 +235,68 @@ void block_offset_to_pointers(const uint8_t *d_compressed_data,
   cudaFree(d_block_offsets);
 }
 
+__global__ void coalesce_data_kernel(uint8_t *out, void **d_uncompressed_ptrs,
+                                     size_t *d_uncompressed_bytes,
+                                     size_t num_chunks) {
+  // Calculate the global thread ID
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx >= num_chunks) {
+    return;
+  }
+
+  // Iterate over each chunk
+  for (size_t chunk_idx = 0; chunk_idx < num_chunks; ++chunk_idx) {
+    // Get the pointer to the current chunk and its size
+    uint8_t *chunk_ptr = (uint8_t *)d_uncompressed_ptrs[chunk_idx];
+    size_t chunk_size = d_uncompressed_bytes[chunk_idx];
+
+    // Check if the current thread is within the bounds of this chunk
+    if (idx < chunk_size) {
+      // Calculate the destination index in the output buffer
+      size_t dest_idx = 0;
+      for (size_t i = 0; i < chunk_idx; ++i) {
+        dest_idx += d_uncompressed_bytes[i];
+      }
+      dest_idx += idx;
+
+      // Copy the data from the chunk to the output buffer
+      out[dest_idx] = chunk_ptr[idx];
+    }
+
+    // Update the global thread ID for the next iteration
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+void coalesce_data(uint8_t *out, void **d_uncompressed_ptrs,
+                   size_t *d_uncompressed_bytes, size_t num_chunks,
+                   size_t total_size) {
+  // Define the block size and grid size for the kernel launch
+  const int blockSize = 256;
+  const int gridSize = (total_size + blockSize - 1) / blockSize;
+
+  // Launch the kernel
+  coalesce_data_kernel<<<gridSize, blockSize>>>(
+      out, d_uncompressed_ptrs, d_uncompressed_bytes, num_chunks);
+
+  // Check for any errors launching the kernel
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    std::cerr << "Failed to launch coalesce_data_kernel (error code "
+              << cudaGetErrorString(err) << ")!\n";
+    exit(EXIT_FAILURE);
+  }
+
+  // Synchronize the device
+  err = cudaDeviceSynchronize();
+  if (err != cudaSuccess) {
+    std::cerr << "Failed to synchronize device (error code "
+              << cudaGetErrorString(err) << ")!\n";
+    exit(EXIT_FAILURE);
+  }
+}
+
 /**
  * @brief Decompresses the data using bitshuffle and LZ4 on the GPU
  */
@@ -363,6 +425,18 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   cudaStreamSynchronize(stream);
 
   // TODO: Figure out if there is actually decompressed data
+  uint8_t *test_ptr = new uint8_t[1];
+  cudaMemcpy(test_ptr, d_uncompressed_ptrs, 1, cudaMemcpyDeviceToHost);
+  printf("Test ptr: %p\n", *test_ptr);
+
+  // User list of pointers: d_uncompressed_ptrs and sizes: d_uncompressed_bytes
+  // to copy the data into the output buffer
+  uint8_t *d_output_buffer;
+  cudaMalloc(&d_output_buffer, image_size_bytes);
+
+  // Copy the decompressed data to the output buffer
+  coalesce_data(d_output_buffer, d_uncompressed_ptrs, d_uncompressed_bytes,
+                batch_size, image_size_bytes);
 
   // Cleanup
   // delete[] host_statuses;
