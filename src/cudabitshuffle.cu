@@ -235,6 +235,14 @@ void block_offset_to_pointers(const uint8_t *d_compressed_data,
   cudaFree(d_block_offsets);
 }
 
+__global__ void print_pointers_kernel(void **d_uncompressed_ptrs,
+                                      size_t num_chunks) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < num_chunks) {
+    printf("Pointer %d: %p\n", idx, d_uncompressed_ptrs[idx]);
+  }
+}
+
 __global__ void prefix_sum_kernel(size_t *d_uncompressed_bytes,
                                   size_t *d_prefix_sum_bytes,
                                   size_t *num_chunks) {
@@ -287,45 +295,101 @@ void coalesce_data(uint8_t *out, void **d_uncompressed_ptrs,
                    size_t *d_uncompressed_bytes, size_t batch_size,
                    size_t total_size) {
   size_t *d_batch_size;
-  cudaMalloc(&d_batch_size, sizeof(size_t));
-  cudaMemcpy(d_batch_size, &batch_size, sizeof(size_t), cudaMemcpyHostToDevice);
+  cudaError_t err;
+
+  err = cudaMalloc(&d_batch_size, sizeof(size_t));
+  if (err != cudaSuccess) {
+    printf("Error allocating d_batch_size: %s\n", cudaGetErrorString(err));
+    return;
+  }
+
+  err = cudaMemcpy(d_batch_size, &batch_size, sizeof(size_t),
+                   cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) {
+    printf("Error copying batch_size to device: %s\n", cudaGetErrorString(err));
+    cudaFree(d_batch_size);
+    return;
+  }
 
   // Define the block size and grid size for the kernel launch
   dim3 blockSize(256);
   dim3 gridSize((batch_size + blockSize.x - 1) / blockSize.x);
 
   size_t *d_prefix_sum_bytes;
-  cudaMalloc(&d_prefix_sum_bytes, batch_size * sizeof(size_t));
+  err = cudaMalloc(&d_prefix_sum_bytes, batch_size * sizeof(size_t));
+  if (err != cudaSuccess) {
+    printf("Error allocating d_prefix_sum_bytes: %s\n",
+           cudaGetErrorString(err));
+    cudaFree(d_batch_size);
+    return;
+  }
+
   prefix_sum_kernel<<<gridSize, blockSize>>>(d_uncompressed_bytes,
                                              d_prefix_sum_bytes, d_batch_size);
 
-  print_array(d_prefix_sum_bytes, 10);
+  err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    printf("Error before launching prefix_sum_kernel: %s\n",
+           cudaGetErrorString(err));
+    cudaFree(d_batch_size);
+    cudaFree(d_prefix_sum_bytes);
+    return;
+  }
 
-  printf("Launching coalesce_data_kernel with %d blocks and %d threads\n",
-         gridSize.x, blockSize.x);
-  // Launch the kernel
+  err = cudaDeviceSynchronize();
+  if (err != cudaSuccess) {
+    printf("Error during prefix_sum_kernel execution: %s\n",
+           cudaGetErrorString(err));
+    cudaFree(d_batch_size);
+    cudaFree(d_prefix_sum_bytes);
+    return;
+  }
+
+  // Print the pointers in d_uncompressed_ptrs
+  print_pointers_kernel<<<gridSize, blockSize>>>(d_uncompressed_ptrs,
+                                                 batch_size);
+
+  err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    printf("Error before launching print_pointers_kernel: %s\n",
+           cudaGetErrorString(err));
+    cudaFree(d_batch_size);
+    cudaFree(d_prefix_sum_bytes);
+    return;
+  }
+
+  err = cudaDeviceSynchronize();
+  if (err != cudaSuccess) {
+    printf("Error during print_pointers_kernel execution: %s\n",
+           cudaGetErrorString(err));
+    cudaFree(d_batch_size);
+    cudaFree(d_prefix_sum_bytes);
+    return;
+  }
+
+  // Continue with the coalesce_data_kernel launch
   coalesce_data_kernel<<<gridSize, blockSize>>>(
       out, d_uncompressed_ptrs, d_uncompressed_bytes, d_prefix_sum_bytes,
       d_batch_size);
 
-  // Check for any errors launching the kernel
-  cudaError_t err = cudaGetLastError();
+  err = cudaGetLastError();
   if (err != cudaSuccess) {
-    std::cerr << "Failed to launch coalesce_data_kernel (error code "
-              << cudaGetErrorString(err) << ")!\n";
-    exit(EXIT_FAILURE);
+    printf("Error before launching coalesce_data_kernel: %s\n",
+           cudaGetErrorString(err));
+    cudaFree(d_batch_size);
+    cudaFree(d_prefix_sum_bytes);
+    return;
   }
 
-  // Synchronize the device
   err = cudaDeviceSynchronize();
   if (err != cudaSuccess) {
-    std::cerr << "Failed to synchronize device (error code "
-              << cudaGetErrorString(err) << ")!\n";
-    exit(EXIT_FAILURE);
+    printf("Error during coalesce_data_kernel execution: %s\n",
+           cudaGetErrorString(err));
   }
 
   // Free device memory
   cudaFree(d_batch_size);
+  cudaFree(d_prefix_sum_bytes);
 }
 
 /**
