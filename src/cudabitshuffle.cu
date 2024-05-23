@@ -222,29 +222,28 @@ void block_offset_to_pointers(const uint8_t *d_data, size_t *d_block_offsets,
   dim3 threads(256);
   block_offset_to_pointers_kernel<<<blocks, threads>>>(
       d_data, d_block_offsets, d_compressed_ptrs, batch_size);
-
   cuda_throw_error();
   cudaDeviceSynchronize();
-
   // Free device memory
   cudaFree(d_block_offsets);
+  printf("\n");
 }
 
 __global__ void print_pointers_kernel(void **d_uncompressed_ptrs,
-                                      size_t num_chunks) {
+                                      size_t batch_size) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < num_chunks) {
+  if (idx < batch_size) {
     printf("Pointer %d: %p\n", idx, d_uncompressed_ptrs[idx]);
   }
 }
 
 __global__ void prefix_sum_kernel(size_t *d_uncompressed_bytes,
                                   size_t *d_prefix_sum_bytes,
-                                  size_t *num_chunks) {
+                                  size_t *batch_size) {
   // Calculate the global thread ID
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (idx >= *num_chunks) {
+  if (idx >= *batch_size) {
     return;
   }
 
@@ -348,12 +347,15 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
   printf("\n");
 
   // Calculate the uncompressed pointers from the sizes
+  size_t *d_batch_size;
   size_t *d_prefix_sum_bytes; // List of absolute offsets
   cudaMalloc(&d_prefix_sum_bytes, batch_size * sizeof(size_t));
+  cudaMalloc(&d_batch_size, sizeof(size_t));
+  cudaMemcpy(d_batch_size, &batch_size, sizeof(size_t), cudaMemcpyHostToDevice);
   dim3 blocks((batch_size + 255) / 256);
   dim3 threads(256);
   prefix_sum_kernel<<<blocks, threads>>>(d_uncompressed_bytes,
-                                         d_prefix_sum_bytes, &batch_size);
+                                         d_prefix_sum_bytes, d_batch_size);
   cuda_throw_error();
   cudaDeviceSynchronize();
 
@@ -389,15 +391,7 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
 
   cudaStreamSynchronize(stream);
 
-  // TODO: Figure out if there is actually decompressed data
-  // uint8_t *test_ptr = new uint8_t[1];
-  // cudaMemcpy(test_ptr, d_uncompressed_ptrs, 1, cudaMemcpyDeviceToHost);
-  // printf("Test ptr: %p\n", *test_ptr);
-
-  // User list of pointers: d_uncompressed_ptrs and sizes: d_uncompressed_bytes
-  // to copy the data into the output buffer
-  // uint8_t *d_output_buffer;
-  // cudaMalloc(&d_output_buffer, image_size_bytes);
+  print_array(d_uncompressed_bytes, 10);
 
   // Cleanup
   // delete[] host_statuses;
