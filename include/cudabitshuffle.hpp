@@ -11,6 +11,9 @@
 #include <nvcomp/lz4.h>
 #include <stdio.h>
 
+inline auto cuda_error_string(cudaError_t err);
+inline auto cuda_throw_error() -> void;
+
 void byteswap64(void *ptr);
 void byteswap32(void *ptr);
 
