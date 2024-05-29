@@ -391,8 +391,20 @@ void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
 
   cudaStreamSynchronize(stream);
 
-  print_array(d_uncompressed_bytes, 10);
+  // print_array(d_uncompressed_bytes, 10);
 
+  // TODO: Fix this
+  uint8_t *test_ptr = new uint8_t[1];
+  cudaMemcpy(test_ptr, d_uncompressed_ptrs, sizeof(uint8_t),
+             cudaMemcpyDeviceToHost);
+  printf("Test ptr: %p\n", *test_ptr);
+  free(test_ptr);
+
+  // Copy the decompressed data to the host
+  cudaMemcpy(out, d_uncompressed_ptrs, image_size_bytes,
+             cudaMemcpyDeviceToHost);
+
+  cudaDeviceSynchronize();
   // Cleanup
   // delete[] host_statuses;
   cudaFree(d_compressed_data);
