@@ -3,17 +3,6 @@
 // Define the pixel type
 using pixel_t = H5Read::image_type;
 
-class cuda_error : public std::runtime_error {
-public:
-  using std::runtime_error::runtime_error;
-};
-
-inline auto cuda_error_string(cudaError_t err) {
-  const char *err_name = cudaGetErrorName(err);
-  const char *err_str = cudaGetErrorString(err);
-  return fmt::format("{}: {}", std::string{err_name}, std::string{err_str});
-}
-
 /// Allocate memory using cudaMallocHost
 template <typename T> auto make_cuda_pinned_malloc(size_t num_items = 1) {
   using Tb = typename std::remove_extent<T>::type;
@@ -167,7 +156,8 @@ void gpu_decompress(H5Read *reader, uint8_t *out, int chunk_index) {
   }
   printf("\n\n GPU byteswap\n");
 
-  bshuf_decompress_lz4_gpu(buffer.data(), width * height, out);
+  // bshuf_decompress_lz4_gpu(buffer.data(), width * height, out);
+  nvcomp_decompress_lz4(buffer_copy.data() + 12, width * height, out);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();

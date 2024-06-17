@@ -1,22 +1,5 @@
 #include "cudabitshuffle.hpp"
 
-inline auto cuda_error_string(cudaError_t err) {
-  const char *err_name = cudaGetErrorName(err);
-  const char *err_str = cudaGetErrorString(err);
-  printf("CUDA Error: %s: %s\n", err_name, err_str);
-}
-/// Raise an exception IF CUDA is in an error state, with the name and
-/// description
-inline auto cuda_throw_error() -> void {
-  auto err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    printf("CUDA Error: %s: %s\n", cudaGetErrorName(err),
-           cudaGetErrorString(err));
-  } else {
-    printf("No CUDA error\n");
-  }
-}
-
 /**
  * @brief: Swap the bytes of a 64-bit integer in place
  * @param: ptr - pointer to the 64-bit integer
