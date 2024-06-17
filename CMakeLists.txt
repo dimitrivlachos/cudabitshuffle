@@ -35,7 +35,9 @@ find_package(Bitshuffle REQUIRED)
 add_executable(
     cudabitshuffle
     src/cudabitshuffle.cc
-    src/cudabitshuffle.cu
+    #src/cudabitshuffle.cu
+    src/cuda_utils.cu
+    src/nv_decompress.cu
 )
 
 # Add dependencies
