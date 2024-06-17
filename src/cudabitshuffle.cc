@@ -156,9 +156,8 @@ void gpu_decompress(H5Read *reader, uint8_t *out, int chunk_index) {
   }
   printf("\n\n GPU byteswap\n");
 
-
   // bshuf_decompress_lz4_gpu(buffer.data(), width * height, out);
-  nvcomp_decompress_lz4(buffer_copy.data() + 12, width * height, out);
+  nvcomp_decompress_lz4(buffer.data() + 12, width * height, out);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
