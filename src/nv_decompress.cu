@@ -37,6 +37,8 @@ void get_block_size_and_offset(uint8_t *h_buffer, size_t *block_offsets,
 
   // Ensure we do not exceed the allocated batch_size
   if (n_block > batch_size) {
+    printf("n_block: %d, batch_size: %zu, image_size: %zu\n", n_block,
+           batch_size, image_size);
     printf("Error: Number of blocks exceeds batch size.\n");
     return;
   }
