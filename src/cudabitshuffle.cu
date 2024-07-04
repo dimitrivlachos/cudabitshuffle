@@ -88,7 +88,6 @@ template <> __global__ void print_array_kernel<int>(int *d_array, size_t size) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < size) {
     printf("%d: %d\n", idx, d_array[idx]);
-
   }
 }
 
