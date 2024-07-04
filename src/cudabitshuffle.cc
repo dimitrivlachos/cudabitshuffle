@@ -104,10 +104,15 @@ void cpu_decompress(H5Read *reader, std::shared_ptr<pixel_t[]> *out,
   std::cout << std::endl;
 }
 
-void gpu_decompress(H5Read *reader, uint8_t *out, int chunk_index) {
+void gpu_decompress(H5Read *reader, uint8_t *out, size_t pitch,
+                    int chunk_index) {
   // Get the image width and height
   int height = reader->image_shape()[0];
   int width = reader->image_shape()[1];
+
+  uint8_t *d_decompressed_image;
+  cudaMallocPitch(&d_decompressed_image, &pitch, width * sizeof(pixel_t),
+                  height);
 
   printf("Width: %d, Height: %d, pixel_t: %d\n", width, height,
          sizeof(pixel_t));
@@ -143,6 +148,7 @@ void gpu_decompress(H5Read *reader, uint8_t *out, int chunk_index) {
   uint8_t *block = buffer_copy.data() + 12;
   uint32_t image_size = (uint32_t) * (uint64_t *)buffer_copy.data();
   uint32_t n_block = image_size / 8192;
+  printf("host n_block: %d, image_size: %d\n", n_block, image_size);
   if (image_size % 8192)
     n_block++;
   for (int i = 0; i < n_block; i++) {
@@ -157,7 +163,12 @@ void gpu_decompress(H5Read *reader, uint8_t *out, int chunk_index) {
   printf("\n\n GPU byteswap\n");
 
   // bshuf_decompress_lz4_gpu(buffer.data(), width * height, out);
-  nvcomp_decompress_lz4(buffer.data() + 12, width * height, out);
+  // nvcomp_decompress_lz4(buffer.data() + 12, width * height, out);
+  nvcomp_decompress_lz4(buffer.data(), width * height, d_decompressed_image);
+
+  // Copy the decompressed image from the device to the host
+  cudaMemcpy2D(out, width * sizeof(pixel_t), d_decompressed_image, pitch,
+               width * sizeof(pixel_t), height, cudaMemcpyDeviceToHost);
 
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
@@ -185,16 +196,17 @@ int main() {
 
   // uint8_t *decompressed_image = new uint8_t[width * height *
   // sizeof(pixel_t)];
-  uint8_t *decompressed_image;
-  cudaMallocManaged(&decompressed_image, width * height * sizeof(pixel_t));
+  uint8_t *h_decompressed_image = new uint8_t[width * height * sizeof(pixel_t)];
+  // cudaMallocManaged(&h_decompressed_image, width * height * sizeof(pixel_t));
 
-  gpu_decompress(&reader, decompressed_image, 49);
+  gpu_decompress(&reader, h_decompressed_image,
+                 width * height * sizeof(pixel_t), 49);
   // draw_image_data(decompressed_image, width-35, height-40, 35, 40, width,
   // height);
 
   // Check if there are non-zero elements in the decompressed image
   int j = 0;
-  while (decompressed_image[j] == 0) {
+  while (h_decompressed_image[j] == 0) {
     if (j > width * height * sizeof(pixel_t)) {
       std::cout << "No non-zero elements found" << std::endl;
       return 0;
@@ -206,7 +218,7 @@ int main() {
   // Print 50 elements around the first non-zero element of the decompressed
   // data
   for (int i = 0; i < 50; i++) {
-    std::cout << (int)decompressed_image[j - 25 + i] << " ";
+    std::cout << (int)h_decompressed_image[j - 25 + i] << " ";
   }
   std::cout << std::endl;
 
