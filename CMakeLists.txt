@@ -37,6 +37,7 @@ add_executable(
     src/cudabitshuffle.cc
     src/cuda_utils.cu
     src/nv_decompress.cu
+    src/bitshuffle.cu
 )
 
 # Add dependencies
