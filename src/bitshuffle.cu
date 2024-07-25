@@ -31,35 +31,36 @@ __global__ void transpose_byte_bitrow(const char *in, char *out, size_t nrows,
   size_t ii = blockIdx.x * blockDim.x + threadIdx.x; // Row index
   size_t jj = blockIdx.y * blockDim.y + threadIdx.y; // Column index
 
-  if (ii < nrows &&
-      jj < nbyte_row) { // Check if the thread is within the array bounds
-    // Load 8 bytes from each row
-    char row_data[8];
-    for (int k = 0; k < 8; ++k) {
-      row_data[k] = in[(ii + k) * nbyte_row + jj];
-    }
+  if (ii >= nrows || jj >= nbyte_row) {
+    // Return if the thread is outside the array bounds
+    return;
+  }
+  // Load 8 bytes from each row
+  char row_data[8];
+  for (int k = 0; k < 8; ++k) {
+    row_data[k] = in[(ii + k) * nbyte_row + jj];
+  }
 
-    // Perform bit interleaving
-    for (int bit = 0; bit < 8; ++bit) {
-      char result = 0;
-      for (int byte = 0; byte < 8; ++byte) {
-        /*
-         * Extract the bit-th bit from row_data[byte] by right-shifting
-         * 'byte' by 'bit' positions and masking with 1. This isolates
-         * the desired bit from the current byte.
-         *
-         * The extracted bit is then shifted to its new position in the
-         * 'result' variable, which accumulates the bits for the current
-         * position from all 8 bytes.
-         *
-         * The operation ((row_data[byte] >> bit) & 1) isolates the bit-th
-         * bit from row_data[byte], and << byte shifts it to its correct
-         * position in the result byte.
-         */
-        result |= ((row_data[byte] >> bit) & 1) << byte;
-      }
-      out[jj * nrows + ii + bit] = result;
+  // Perform bit interleaving
+  for (int bit = 0; bit < 8; ++bit) {
+    char result = 0;
+    for (int byte = 0; byte < 8; ++byte) {
+      /*
+       * Extract the bit-th bit from row_data[byte] by right-shifting
+       * 'byte' by 'bit' positions and masking with 1. This isolates
+       * the desired bit from the current byte.
+       *
+       * The extracted bit is then shifted to its new position in the
+       * 'result' variable, which accumulates the bits for the current
+       * position from all 8 bytes.
+       *
+       * The operation ((row_data[byte] >> bit) & 1) isolates the bit-th
+       * bit from row_data[byte], and << byte shifts it to its correct
+       * position in the result byte.
+       */
+      result |= ((row_data[byte] >> bit) & 1) << byte;
     }
+    out[jj * nrows + ii + bit] = result;
   }
 }
 
@@ -128,44 +129,45 @@ __global__ void shuffle_bit_eightelem(const char *in, uint16_t *out,
   size_t ii = blockIdx.x * blockDim.x + threadIdx.x; // Byte index
   size_t jj = blockIdx.y * blockDim.y + threadIdx.y; // Bit index
 
-  if (ii < nbyte &&
-      jj < 8 * elem_size) { // Check if the thread is within the array bounds
-    /*
-     * We use shared memory to load 8 bytes from the input data.
-     * Each thread in the block loads one byte from the input data.
-     * The shared memory block_data is a 2D array with 8 rows and 16 columns.
-     * Each row corresponds to a thread in the block, and each column
-     * corresponds to a byte. The block_data array is used to load 8 bytes from
-     * the input data in a coalesced manner. The __syncthreads() function is
-     * called to synchronize all threads in the block.
-     */
-    __shared__ char block_data[8][16];
+  if (ii >= nbyte || jj >= 8 * elem_size) {
+    // Return if the thread is outside the array bounds
+    return;
+  }
+  /*
+   * We use shared memory to load 8 bytes from the input data.
+   * Each thread in the block loads one byte from the input data.
+   * The shared memory block_data is a 2D array with 8 rows and 16 columns.
+   * Each row corresponds to a thread in the block, and each column
+   * corresponds to a byte. The block_data array is used to load 8 bytes from
+   * the input data in a coalesced manner. The __syncthreads() function is
+   * called to synchronize all threads in the block.
+   */
+  __shared__ char block_data[8][16];
 
-    if (threadIdx.y < 16) {
-      block_data[threadIdx.x][threadIdx.y] = in[ii + jj + threadIdx.y];
-    }
-    __syncthreads();
+  if (threadIdx.y < 16) {
+    block_data[threadIdx.x][threadIdx.y] = in[ii + jj + threadIdx.y];
+  }
+  __syncthreads();
 
-    /*
-     * This portion only executes for the first 8 threads in the block.
-     * As these are the threads responsible for shuffling the bits within the
-     * bytes.
-     */
-    if (threadIdx.y < 8) {
-      int32_t bt; // Holds the bit to be shuffled
-      char xmm =
-          block_data[threadIdx.x][threadIdx.y]; // Holds the byte to be shuffled
+  /*
+   * This portion only executes for the first 8 threads in the block.
+   * As these are the threads responsible for shuffling the bits within the
+   * bytes.
+   */
+  if (threadIdx.y < 8) {
+    int32_t bt; // Holds the bit to be shuffled
+    char xmm =
+        block_data[threadIdx.x][threadIdx.y]; // Holds the byte to be shuffled
 
-      for (int k = 0; k < 8; ++k) {
-        bt = __ballot_sync(0xFFFFFFFF,
-                           (xmm & 1) != 0); // Ballot the least significant bit
-        xmm >>= 1; // Shift the byte to the right by 1 bit to prepare for the
-                   // next bit
-        size_t ind =
-            ii + (jj / 8) + (7 - k) * elem_size; // Calculate the output index
-        if (threadIdx.y == 0) { // Only the first thread writes the result
-          out[ind / 2] = bt;
-        }
+    for (int k = 0; k < 8; ++k) {
+      bt = __ballot_sync(0xFFFFFFFF,
+                         (xmm & 1) != 0); // Ballot the least significant bit
+      xmm >>= 1; // Shift the byte to the right by 1 bit to prepare for the
+                 // next bit
+      size_t ind =
+          ii + (jj / 8) + (7 - k) * elem_size; // Calculate the output index
+      if (threadIdx.y == 0) { // Only the first thread writes the result
+        out[ind / 2] = bt;
       }
     }
   }
