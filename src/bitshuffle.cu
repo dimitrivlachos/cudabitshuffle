@@ -29,8 +29,7 @@ namespace cg = cooperative_groups;
  * 0b00011100, 0b10010110] The kernel transposes the bits to produce the output
  * bytes.
  */
-__global__ void transpose_byte_bitrow(const char __restrict__ *in,
-                                      char __restrict__ *out, size_t nrows,
+__global__ void transpose_byte_bitrow(const char *in, char *out, size_t nrows,
                                       size_t nbyte_row) {
   size_t row_index = blockIdx.x * blockDim.x + threadIdx.x;    // Row index
   size_t column_index = blockIdx.y * blockDim.y + threadIdx.y; // Column index
@@ -128,9 +127,8 @@ void launch_transpose_byte_bitrow(const void *in, void *out, size_t size,
  * 0b00011100, 0b10010110] The kernel shuffles the bits within the bytes and
  * stores the shuffled result in the output array.
  */
-__global__ void shuffle_bit_eightelem(const char __restrict__ *in,
-                                      uint16_t __restrict__ *out, size_t nbyte,
-                                      size_t elem_size) {
+__global__ void shuffle_bit_eightelem(const char *in, uint16_t *out,
+                                      size_t nbyte, size_t elem_size) {
   size_t byte_index = blockIdx.x * blockDim.x + threadIdx.x; // Byte index
   size_t bit_index = blockIdx.y * blockDim.y + threadIdx.y;  // Bit index
 
