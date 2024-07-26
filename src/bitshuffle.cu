@@ -1,4 +1,7 @@
 #include "cudabitshuffle.hpp"
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 
 /**
  * @brief Transpose bytes in a matrix where each row represents a bit of the
@@ -131,6 +134,9 @@ __global__ void shuffle_bit_eightelem(const char __restrict__ *in,
   size_t byte_index = blockIdx.x * blockDim.x + threadIdx.x; // Byte index
   size_t bit_index = blockIdx.y * blockDim.y + threadIdx.y;  // Bit index
 
+  cg::thread_block cg_block =
+      cg::this_thread_block(); // Define the cooperative thread block
+
   if (byte_index >= nbyte || bit_index >= 8 * elem_size) {
     // Return if the thread is outside the array bounds
     return;
@@ -150,7 +156,7 @@ __global__ void shuffle_bit_eightelem(const char __restrict__ *in,
     block_data[threadIdx.x][threadIdx.y] =
         in[byte_index + bit_index + threadIdx.y];
   }
-  __syncthreads();
+  cg_block.sync(); // Synchronize all threads in the block
 
   /*
    * This portion only executes for the first 8 threads in the block.
@@ -163,9 +169,8 @@ __global__ void shuffle_bit_eightelem(const char __restrict__ *in,
         block_data[threadIdx.x][threadIdx.y]; // Holds the byte to be shuffled
 
     for (int k = 0; k < 8; ++k) {
-      bit_mask = __ballot_sync(0xFFFFFFFF,
-                               (current_byte & 1) !=
-                                   0); // Ballot the least significant bit
+      bit_mask =
+          cg_block.ballot(current_byte & 1); // Ballot the least significant bit
       current_byte >>= 1; // Shift the byte to the right by 1 bit to prepare for
                           // the next bit
       size_t ind = byte_index + (bit_index / 8) +
