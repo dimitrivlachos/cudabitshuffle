@@ -29,17 +29,17 @@
 __global__ void transpose_byte_bitrow(const char __restrict__ *in,
                                       char __restrict__ *out, size_t nrows,
                                       size_t nbyte_row) {
-  size_t ii = blockIdx.x * blockDim.x + threadIdx.x; // Row index
-  size_t jj = blockIdx.y * blockDim.y + threadIdx.y; // Column index
+  size_t row_index = blockIdx.x * blockDim.x + threadIdx.x;    // Row index
+  size_t column_index = blockIdx.y * blockDim.y + threadIdx.y; // Column index
 
-  if (ii >= nrows || jj >= nbyte_row) {
+  if (row_index >= nrows || column_index >= nbyte_row) {
     // Return if the thread is outside the array bounds
     return;
   }
   // Load 8 bytes from each row
   char row_data[8];
   for (int k = 0; k < 8; ++k) {
-    row_data[k] = in[(ii + k) * nbyte_row + jj];
+    row_data[k] = in[(row_index + k) * nbyte_row + column_index];
   }
 
   // Perform bit interleaving
@@ -61,7 +61,7 @@ __global__ void transpose_byte_bitrow(const char __restrict__ *in,
        */
       result |= ((row_data[byte] >> bit) & 1) << byte;
     }
-    out[jj * nrows + ii + bit] = result;
+    out[column_index * nrows + row_index + bit] = result;
   }
 }
 
@@ -128,10 +128,10 @@ void launch_transpose_byte_bitrow(const void *in, void *out, size_t size,
 __global__ void shuffle_bit_eightelem(const char __restrict__ *in,
                                       uint16_t __restrict__ *out, size_t nbyte,
                                       size_t elem_size) {
-  size_t ii = blockIdx.x * blockDim.x + threadIdx.x; // Byte index
-  size_t jj = blockIdx.y * blockDim.y + threadIdx.y; // Bit index
+  size_t byte_index = blockIdx.x * blockDim.x + threadIdx.x; // Byte index
+  size_t bit_index = blockIdx.y * blockDim.y + threadIdx.y;  // Bit index
 
-  if (ii >= nbyte || jj >= 8 * elem_size) {
+  if (byte_index >= nbyte || bit_index >= 8 * elem_size) {
     // Return if the thread is outside the array bounds
     return;
   }
@@ -147,7 +147,8 @@ __global__ void shuffle_bit_eightelem(const char __restrict__ *in,
   __shared__ char block_data[8][16];
 
   if (threadIdx.y < 16) {
-    block_data[threadIdx.x][threadIdx.y] = in[ii + jj + threadIdx.y];
+    block_data[threadIdx.x][threadIdx.y] =
+        in[byte_index + bit_index + threadIdx.y];
   }
   __syncthreads();
 
@@ -157,19 +158,20 @@ __global__ void shuffle_bit_eightelem(const char __restrict__ *in,
    * bytes.
    */
   if (threadIdx.y < 8) {
-    int32_t bt; // Holds the bit to be shuffled
-    char xmm =
+    int32_t bit_mask; // Holds the bit to be shuffled
+    char current_byte =
         block_data[threadIdx.x][threadIdx.y]; // Holds the byte to be shuffled
 
     for (int k = 0; k < 8; ++k) {
-      bt = __ballot_sync(0xFFFFFFFF,
-                         (xmm & 1) != 0); // Ballot the least significant bit
-      xmm >>= 1; // Shift the byte to the right by 1 bit to prepare for the
-                 // next bit
-      size_t ind =
-          ii + (jj / 8) + (7 - k) * elem_size; // Calculate the output index
+      bit_mask = __ballot_sync(0xFFFFFFFF,
+                               (current_byte & 1) !=
+                                   0); // Ballot the least significant bit
+      current_byte >>= 1; // Shift the byte to the right by 1 bit to prepare for
+                          // the next bit
+      size_t ind = byte_index + (bit_index / 8) +
+                   (7 - k) * elem_size; // Calculate the output index
       if (threadIdx.y == 0) { // Only the first thread writes the result
-        out[ind / 2] = bt;
+        out[ind / 2] = bit_mask;
       }
     }
   }
