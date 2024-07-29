@@ -166,12 +166,15 @@ void gpu_decompress(H5Read *reader, uint8_t *out, size_t pitch,
   // nvcomp_decompress_lz4(buffer.data() + 12, width * height, out);
   nvcomp_decompress_lz4(buffer.data(), width * height, d_decompressed_image);
 
+  uint8_t *d_unshuffled_image;
+  cudaMallocPitch(&d_unshuffled_image, &pitch, width * sizeof(pixel_t), height);
+
   // Perform bit unshuffling and transposing on the GPU
-  // bshuf_untrans_bit_elem_CUDA(d_decompressed_image, d_decompressed_image,
-  //                             width * height, sizeof(pixel_t));
+  bshuf_untrans_bit_elem_CUDA(d_decompressed_image, d_unshuffled_image,
+                              width * height, sizeof(pixel_t));
 
   // Copy the decompressed image from the device to the host
-  cudaMemcpy2D(out, width * sizeof(pixel_t), d_decompressed_image, pitch,
+  cudaMemcpy2D(out, width * sizeof(pixel_t), d_unshuffled_image, pitch,
                width * sizeof(pixel_t), height, cudaMemcpyDeviceToHost);
 
   // Get the chunk compression type

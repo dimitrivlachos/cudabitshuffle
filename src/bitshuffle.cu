@@ -243,14 +243,21 @@ void launch_shuffle_bit_eightelem(const void *in, void *out, size_t size,
  */
 void bshuf_untrans_bit_elem_CUDA(const void *in, void *out, size_t size,
                                  size_t elem_size) {
+  printf("bshuf_untrans_bit_elem_CUDA\n");
   void *tmp_buf;
-  cudaMalloc(&tmp_buf, size * elem_size);
+  // cudaMalloc(&tmp_buf, size * elem_size);
+  cudaMallocPitch(&tmp_buf, &size, size, elem_size);
 
   // Step 1: Transpose bytes within bit rows
+  printf("Transposing bytes within bit rows\n");
   launch_transpose_byte_bitrow(in, tmp_buf, size, elem_size);
+  cuda_throw_error();
 
   // Step 2: Shuffle bits within bytes of eight-element blocks
+  printf("Shuffling bits within bytes of eight-element blocks\n");
   launch_shuffle_bit_eightelem(tmp_buf, out, size, elem_size);
+  cuda_throw_error();
 
+  printf("Freeing temporary buffer\n");
   cudaFree(tmp_buf);
 }
