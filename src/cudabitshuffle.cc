@@ -178,6 +178,12 @@ void gpu_decompress(H5Read *reader, uint8_t *out, size_t pitch,
   cudaMemcpy2D(out, width * sizeof(pixel_t), d_unshuffled_image, pitch,
                width * sizeof(pixel_t), height, cudaMemcpyDeviceToHost);
 
+  // Free the device memory
+  cudaFree(d_decompressed_image);
+
+  // Writeout the decompressed image to a PNG file
+  lodepng::encode("decompressed.png", out, width, height, LCT_GREY, 8);
+
   // Get the chunk compression type
   auto compression = reader->get_raw_chunk_compression();
   std::cout << "Chunk compression: " << compression << std::endl;
