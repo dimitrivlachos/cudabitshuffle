@@ -19,6 +19,10 @@ include_directories(common/include)
 add_subdirectory(h5read)
 add_subdirectory(dependencies/fmt)
 
+add_library(lodepng STATIC dependencies/lodepng/lodepng.cpp)
+target_include_directories(lodepng INTERFACE dependencies/lodepng)
+target_compile_definitions(lodepng INTERFACE HAVE_LODEPNG)
+
 # Set path to nvcomp
 set(nvcomp_DIR "${CMAKE_SOURCE_DIR}/ENV/lib/cmake/nvcomp")
 
@@ -43,6 +47,7 @@ target_link_libraries(
     cudabitshuffle
     PRIVATE
     fmt
+    lodepng
     h5read
     CUDA::cudart
     LZ4::LZ4

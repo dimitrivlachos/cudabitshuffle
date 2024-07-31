@@ -1,4 +1,5 @@
 #include "cudabitshuffle.hpp"
+#include <lodepng.h>
 
 // Define the pixel type
 using pixel_t = H5Read::image_type;
