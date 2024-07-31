@@ -29,10 +29,11 @@ namespace cg = cooperative_groups;
  * 0b00011100, 0b10010110] The kernel transposes the bits to produce the output
  * bytes.
  */
-__global__ void transpose_byte_bitrow(const uint8_t *in, uint8_t *out,
-                                      size_t nrows, size_t nbyte_row) {
-  size_t row_index = blockIdx.x * blockDim.x + threadIdx.x;    // Row index
-  size_t column_index = blockIdx.y * blockDim.y + threadIdx.y; // Column index
+__global__ void transpose_byte_bitrow(const uint8_t __restrict__ *in,
+                                      uint8_t __restrict__ *out, size_t nrows,
+                                      size_t nbyte_row) {
+  size_t column_index = blockIdx.x * blockDim.x + threadIdx.x; // Column index
+  size_t row_index = blockIdx.y * blockDim.y + threadIdx.y;    // Row index
 
   if (row_index >= nrows || column_index >= nbyte_row) {
     // Return if the thread is outside the array bounds
@@ -85,23 +86,24 @@ __global__ void transpose_byte_bitrow(const uint8_t *in, uint8_t *out,
  * (nbyte_row) and sets up the CUDA grid and block dimensions. It then launches
  * the transpose_byte_bitrow kernel and waits for its completion.
  */
-void launch_transpose_byte_bitrow(const uint8_t *in, uint8_t *out, size_t size,
+void launch_transpose_byte_bitrow(const void *in, void *out, size_t size,
                                   size_t elem_size) {
   printf("DEBUG: size=%lu, elem_size=%lu\n", size, elem_size);
 
-  size_t nrows = 8 * elem_size; // Number of rows in the bit matrix
-  size_t nbyte_row = size / 8;  // Number of bytes in each row
+  size_t nrows = 8 * elem_size;
+  size_t nbyte_row = size / 8;
 
   printf("DEBUG: nrows=%lu, nbyte_row=%lu\n", nrows, nbyte_row);
 
   dim3 block_size(16, 16);
-  dim3 grid_size((nrows + block_size.x - 1) / block_size.x,
-                 (nbyte_row + block_size.y - 1) / block_size.y);
+  dim3 grid_size((nbyte_row + block_size.x - 1) / block_size.x,
+                 (nrows + block_size.y - 1) / block_size.y);
 
   printf("DEBUG: block_size=(%d, %d), grid_size=(%d, %d)\n", block_size.x,
          block_size.y, grid_size.x, grid_size.y);
 
-  transpose_byte_bitrow<<<grid_size, block_size>>>(in, out, nrows, nbyte_row);
+  transpose_byte_bitrow<<<grid_size, block_size>>>(
+      (const uint8_t *)in, (uint8_t *)out, nrows, nbyte_row);
   cudaDeviceSynchronize();
 }
 
@@ -133,8 +135,9 @@ void launch_transpose_byte_bitrow(const uint8_t *in, uint8_t *out, size_t size,
  * 0b00011100, 0b10010110] The kernel shuffles the bits within the bytes and
  * stores the shuffled result in the output array.
  */
-__global__ void shuffle_bit_eightelem(const uint8_t *in, uint8_t *out,
-                                      size_t nbyte, size_t elem_size) {
+__global__ void shuffle_bit_eightelem(const uint8_t __restrict__ *in,
+                                      uint16_t __restrict__ *out, size_t nbyte,
+                                      size_t elem_size) {
   size_t byte_index = blockIdx.x * blockDim.x + threadIdx.x; // Byte index
   size_t bit_index = blockIdx.y * blockDim.y + threadIdx.y;  // Bit index
 
@@ -169,9 +172,11 @@ __global__ void shuffle_bit_eightelem(const uint8_t *in, uint8_t *out,
    * bytes.
    */
   if (threadIdx.y < 8) {
-    int32_t bit_mask; // Holds the bit to be shuffled
+    int32_t bit_mask; // Holds the bitmask representing the predicate results
+                      // across the warp
     uint8_t current_byte =
-        block_data[threadIdx.x][threadIdx.y]; // Holds the byte to be shuffled
+        block_data[threadIdx.x]
+                  [threadIdx.y]; // Holds the current byte being processed
 
     for (int k = 0; k < 8; ++k) {
       // bit_mask =
@@ -217,7 +222,7 @@ void launch_shuffle_bit_eightelem(const void *in, void *out, size_t size,
                  (8 * elem_size + block_size.y - 1) / block_size.y);
 
   shuffle_bit_eightelem<<<grid_size, block_size>>>(
-      (const char *)in, (uint16_t *)out, nbyte, elem_size);
+      (const uint8_t *)in, (uint16_t *)out, nbyte, elem_size);
   cudaDeviceSynchronize();
 }
 
@@ -250,7 +255,7 @@ void launch_shuffle_bit_eightelem(const void *in, void *out, size_t size,
 void bshuf_untrans_bit_elem_CUDA(const void *in, void *out, size_t size,
                                  size_t elem_size) {
   printf("bshuf_untrans_bit_elem_CUDA\n");
-  void *tmp_buf;
+  uint8_t *tmp_buf;
   // cudaMalloc(&tmp_buf, size * elem_size);
   cudaMallocPitch(&tmp_buf, &size, size, elem_size);
 
