@@ -29,8 +29,8 @@ namespace cg = cooperative_groups;
  * 0b00011100, 0b10010110] The kernel transposes the bits to produce the output
  * bytes.
  */
-__global__ void transpose_byte_bitrow(const char *in, char *out, size_t nrows,
-                                      size_t nbyte_row) {
+__global__ void transpose_byte_bitrow(const uint8_t *in, uint8_t *out,
+                                      size_t nrows, size_t nbyte_row) {
   size_t row_index = blockIdx.x * blockDim.x + threadIdx.x;    // Row index
   size_t column_index = blockIdx.y * blockDim.y + threadIdx.y; // Column index
 
@@ -39,14 +39,14 @@ __global__ void transpose_byte_bitrow(const char *in, char *out, size_t nrows,
     return;
   }
   // Load 8 bytes from each row
-  char row_data[8];
+  uint8_t row_data[8];
   for (int k = 0; k < 8; ++k) {
     row_data[k] = in[(row_index + k) * nbyte_row + column_index];
   }
 
   // Perform bit interleaving
   for (int bit = 0; bit < 8; ++bit) {
-    char result = 0;
+    uint8_t result = 0;
     for (int byte = 0; byte < 8; ++byte) {
       /*
        * Extract the bit-th bit from row_data[byte] by right-shifting
@@ -85,17 +85,23 @@ __global__ void transpose_byte_bitrow(const char *in, char *out, size_t nrows,
  * (nbyte_row) and sets up the CUDA grid and block dimensions. It then launches
  * the transpose_byte_bitrow kernel and waits for its completion.
  */
-void launch_transpose_byte_bitrow(const void *in, void *out, size_t size,
+void launch_transpose_byte_bitrow(const uint8_t *in, uint8_t *out, size_t size,
                                   size_t elem_size) {
-  size_t nrows = 8 * elem_size;
-  size_t nbyte_row = size / 8;
+  printf("DEBUG: size=%lu, elem_size=%lu\n", size, elem_size);
+
+  size_t nrows = 8 * elem_size; // Number of rows in the bit matrix
+  size_t nbyte_row = size / 8;  // Number of bytes in each row
+
+  printf("DEBUG: nrows=%lu, nbyte_row=%lu\n", nrows, nbyte_row);
 
   dim3 block_size(16, 16);
   dim3 grid_size((nrows + block_size.x - 1) / block_size.x,
                  (nbyte_row + block_size.y - 1) / block_size.y);
 
-  transpose_byte_bitrow<<<grid_size, block_size>>>(
-      (const char *)in, (char *)out, nrows, nbyte_row);
+  printf("DEBUG: block_size=(%d, %d), grid_size=(%d, %d)\n", block_size.x,
+         block_size.y, grid_size.x, grid_size.y);
+
+  transpose_byte_bitrow<<<grid_size, block_size>>>(in, out, nrows, nbyte_row);
   cudaDeviceSynchronize();
 }
 
@@ -127,7 +133,7 @@ void launch_transpose_byte_bitrow(const void *in, void *out, size_t size,
  * 0b00011100, 0b10010110] The kernel shuffles the bits within the bytes and
  * stores the shuffled result in the output array.
  */
-__global__ void shuffle_bit_eightelem(const char *in, uint16_t *out,
+__global__ void shuffle_bit_eightelem(const uint8_t *in, uint8_t *out,
                                       size_t nbyte, size_t elem_size) {
   size_t byte_index = blockIdx.x * blockDim.x + threadIdx.x; // Byte index
   size_t bit_index = blockIdx.y * blockDim.y + threadIdx.y;  // Bit index
@@ -148,7 +154,7 @@ __global__ void shuffle_bit_eightelem(const char *in, uint16_t *out,
    * the input data in a coalesced manner. The __syncthreads() function is
    * called to synchronize all threads in the block.
    */
-  __shared__ char block_data[8][16];
+  __shared__ uint8_t block_data[8][16];
 
   if (threadIdx.y < 16) {
     block_data[threadIdx.x][threadIdx.y] =
@@ -164,7 +170,7 @@ __global__ void shuffle_bit_eightelem(const char *in, uint16_t *out,
    */
   if (threadIdx.y < 8) {
     int32_t bit_mask; // Holds the bit to be shuffled
-    char current_byte =
+    uint8_t current_byte =
         block_data[threadIdx.x][threadIdx.y]; // Holds the byte to be shuffled
 
     for (int k = 0; k < 8; ++k) {
