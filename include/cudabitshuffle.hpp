@@ -40,5 +40,5 @@ void byteswap32(void *ptr);
 void nvcomp_decompress_lz4(uint8_t *h_compressed_data, const size_t image_size,
                            uint8_t *d_decompressed_data);
 
-void bshuf_untrans_bit_elem_CUDA(const void *in, void *out, size_t size,
+void bshuf_untrans_bit_elem_CUDA(const uint8_t *in, uint8_t *out, size_t size,
                                  size_t elem_size);

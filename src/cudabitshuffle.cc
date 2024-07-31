@@ -171,7 +171,7 @@ void gpu_decompress(H5Read *reader, uint8_t *out, size_t pitch,
 
   // Perform bit unshuffling and transposing on the GPU
   bshuf_untrans_bit_elem_CUDA(d_decompressed_image, d_unshuffled_image,
-                              width * height, sizeof(pixel_t));
+                              width * height, sizeof(uint8_t));
 
   // Copy the decompressed image from the device to the host
   cudaMemcpy2D(out, width * sizeof(pixel_t), d_unshuffled_image, pitch,
