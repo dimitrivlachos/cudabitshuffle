@@ -21,6 +21,7 @@ inline auto cuda_error_string(cudaError_t err) {
   const char *err_str = cudaGetErrorString(err);
   printf("CUDA Error: %s: %s\n", err_name, err_str);
 }
+
 /// Raise an exception IF CUDA is in an error state, with the name and
 /// description
 inline auto cuda_throw_error() -> void {
@@ -36,8 +37,8 @@ inline auto cuda_throw_error() -> void {
 void byteswap64(void *ptr);
 void byteswap32(void *ptr);
 
-// void bshuf_decompress_lz4_gpu(uint8_t *h_compressed_data,
-//                               const size_t image_size, uint8_t *out);
-
 void nvcomp_decompress_lz4(uint8_t *h_compressed_data, const size_t image_size,
                            uint8_t *d_decompressed_data);
+
+void bshuf_untrans_bit_elem_CUDA(const void *in, void *out, size_t size,
+                                 size_t elem_size);

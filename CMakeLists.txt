@@ -11,9 +11,6 @@ include(SetDefaultBuildRelWithDebInfo)
 include(AlwaysColourCompilation)
 include(UseSpanBackportIfNeeded)
 
-# Find the CUDA package
-find_package(CUDAToolkit REQUIRED)
-
 # Add the directories
 include_directories(include)
 include_directories(common/include)
@@ -21,6 +18,10 @@ include_directories(common/include)
 # Add subdirectories
 add_subdirectory(h5read)
 add_subdirectory(dependencies/fmt)
+
+add_library(lodepng STATIC dependencies/lodepng/lodepng.cpp)
+target_include_directories(lodepng INTERFACE dependencies/lodepng)
+target_compile_definitions(lodepng INTERFACE HAVE_LODEPNG)
 
 # Set path to nvcomp
 set(nvcomp_DIR "${CMAKE_SOURCE_DIR}/ENV/lib/cmake/nvcomp")
@@ -37,6 +38,7 @@ add_executable(
     src/cudabitshuffle.cc
     src/cuda_utils.cu
     src/nv_decompress.cu
+    src/bitshuffle.cu
 )
 
 # Add dependencies
@@ -44,6 +46,7 @@ target_link_libraries(
     cudabitshuffle
     PRIVATE
     fmt
+    lodepng
     h5read
     CUDA::cudart
     LZ4::LZ4

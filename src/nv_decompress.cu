@@ -56,10 +56,11 @@ void get_block_size_and_offset(uint8_t *h_buffer, size_t *block_offsets,
         cumulative_offset; // Add the offset to the block offsets
     block += next + 4;     // Move to the next block
 
-    if (i < 10 || i > 4400) {
-      printf("%d: Next: %d, Cumulative: %d, Block: %p, Block offset size: %d\n",
-             i, next, cumulative_offset, block, i + 2);
-    }
+    // if (i < 10 || i > 4400) {
+    //   printf("%d: Next: %d, Cumulative: %d, Block: %p, Block offset size:
+    //   %d\n",
+    //          i, next, cumulative_offset, block, i + 2);
+    // }
   }
 
   // Print the sizes of block_offsets and block_sizes
