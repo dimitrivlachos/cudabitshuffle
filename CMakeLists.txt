@@ -31,7 +31,6 @@ find_package(nvcomp REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(Bitshuffle REQUIRED)
-find_package(CUDAToolkit REQUIRED)
 
 # Add the executable
 add_executable(
